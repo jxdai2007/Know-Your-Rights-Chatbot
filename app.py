@@ -1,0 +1,234 @@
+"""
+app.py — Streamlit frontend for the Know Your Rights chatbot.
+"""
+
+import time
+
+import streamlit as st
+
+from src.rag_engine import answer_question
+
+# ── Page config ───────────────────────────────────────────────────
+st.set_page_config(
+    page_title="Know Your Rights",
+    page_icon="\U0001f6e1\ufe0f",
+    layout="centered",
+    initial_sidebar_state="expanded",
+)
+
+# ── Session state defaults ────────────────────────────────────────
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "language" not in st.session_state:
+    st.session_state.language = "en"
+
+# ── Quick-action definitions per language ─────────────────────────
+QUICK_ACTIONS = {
+    "en": [
+        ("\U0001f6aa What if ICE comes to my door?", "What are my rights if ICE comes to my door?"),
+        ("\U0001f46e Rights when stopped by police", "What are my rights when stopped by police?"),
+        ("\U0001f910 Can I refuse to answer questions?", "Can I refuse to answer questions from immigration agents?"),
+        ("\U0001faaa Do I need to show ID?", "Do I need to show identification to police or immigration agents?"),
+    ],
+    "es": [
+        ("\U0001f6aa \u00bfQu\u00e9 pasa si ICE viene a mi puerta?", "\u00bfCu\u00e1les son mis derechos si ICE viene a mi puerta?"),
+        ("\U0001f46e Derechos al ser detenido por la polic\u00eda", "\u00bfCu\u00e1les son mis derechos cuando me detiene la polic\u00eda?"),
+        ("\U0001f910 \u00bfPuedo negarme a responder preguntas?", "\u00bfPuedo negarme a responder preguntas de agentes de inmigraci\u00f3n?"),
+        ("\U0001faaa \u00bfNecesito mostrar identificaci\u00f3n?", "\u00bfNecesito mostrar identificaci\u00f3n a la polic\u00eda o agentes de inmigraci\u00f3n?"),
+    ],
+}
+
+DISCLAIMER = {
+    "en": (
+        "\u26a0\ufe0f **Disclaimer:** This tool provides general information only, "
+        "**not legal advice**. For guidance on your specific situation, please "
+        "consult a qualified immigration attorney."
+    ),
+    "es": (
+        "\u26a0\ufe0f **Aviso:** Esta herramienta proporciona informaci\u00f3n general "
+        "solamente, **no es asesoramiento legal**. Para orientaci\u00f3n sobre su "
+        "situaci\u00f3n espec\u00edfica, consulte con un abogado de inmigraci\u00f3n calificado."
+    ),
+}
+
+PLACEHOLDER = {
+    "en": "Ask about your immigration rights...",
+    "es": "Pregunte sobre sus derechos de inmigraci\u00f3n...",
+}
+
+# ── Sidebar ───────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("### \U0001f30d Language / Idioma")
+    lang_choice = st.radio(
+        "Select language",
+        options=["English \U0001f1fa\U0001f1f8", "Espa\u00f1ol \U0001f1f2\U0001f1fd"],
+        index=0 if st.session_state.language == "en" else 1,
+        label_visibility="collapsed",
+    )
+    new_lang = "en" if lang_choice.startswith("English") else "es"
+    if new_lang != st.session_state.language:
+        st.session_state.language = new_lang
+        st.rerun()
+
+    st.divider()
+
+    # Conversation history summary.
+    pairs = [
+        (st.session_state.messages[i], st.session_state.messages[i + 1])
+        for i in range(0, len(st.session_state.messages) - 1, 2)
+        if st.session_state.messages[i]["role"] == "user"
+    ]
+    if pairs:
+        st.markdown("### \U0001f4ac History" if st.session_state.language == "en" else "### \U0001f4ac Historial")
+        for q, _a in pairs[-5:]:
+            st.markdown(f"- {q['content'][:60]}{'...' if len(q['content']) > 60 else ''}")
+
+        if st.button(
+            "\U0001f5d1\ufe0f Clear conversation" if st.session_state.language == "en"
+            else "\U0001f5d1\ufe0f Borrar conversaci\u00f3n"
+        ):
+            st.session_state.messages = []
+            st.rerun()
+
+    st.divider()
+
+    with st.expander(
+        "\u2139\ufe0f About this tool" if st.session_state.language == "en"
+        else "\u2139\ufe0f Acerca de esta herramienta"
+    ):
+        if st.session_state.language == "en":
+            st.markdown(
+                "This assistant uses **Retrieval-Augmented Generation (RAG)** "
+                "to answer immigration rights questions using only verified "
+                "content from **ACLU Know Your Rights** guides.\n\n"
+                "**How it works:** Your question is matched against 154 "
+                "knowledge chunks from 11 ACLU documents (6 English, 5 Spanish) "
+                "using semantic search. The most relevant passages are sent to "
+                "Google Gemini to generate an accurate, cited answer.\n\n"
+                "\u26a0\ufe0f This is **not legal advice**. Always consult an "
+                "immigration attorney for your specific situation."
+            )
+        else:
+            st.markdown(
+                "Este asistente utiliza **Generaci\u00f3n Aumentada por "
+                "Recuperaci\u00f3n (RAG)** para responder preguntas sobre derechos "
+                "de inmigraci\u00f3n usando solo contenido verificado de las gu\u00edas "
+                "**ACLU Conozca Sus Derechos**.\n\n"
+                "**C\u00f3mo funciona:** Su pregunta se compara con 154 fragmentos "
+                "de conocimiento de 11 documentos de la ACLU (6 en ingl\u00e9s, "
+                "5 en espa\u00f1ol) mediante b\u00fasqueda sem\u00e1ntica. Los pasajes m\u00e1s "
+                "relevantes se env\u00edan a Google Gemini para generar una "
+                "respuesta precisa y citada.\n\n"
+                "\u26a0\ufe0f Esto **no es asesoramiento legal**. Siempre consulte "
+                "con un abogado de inmigraci\u00f3n para su situaci\u00f3n espec\u00edfica."
+            )
+
+    st.divider()
+    st.caption(
+        "Powered by ACLU Know Your Rights guides \u2022 "
+        "Built with Gemini & ChromaDB"
+    )
+
+# ── Header ────────────────────────────────────────────────────────
+lang = st.session_state.language
+
+st.markdown("# \U0001f6e1\ufe0f Know Your Rights" if lang == "en" else "# \U0001f6e1\ufe0f Conozca Sus Derechos")
+st.markdown(
+    "*Immigration Rights Information Assistant*" if lang == "en"
+    else "*Asistente de Informaci\u00f3n sobre Derechos de Inmigraci\u00f3n*"
+)
+st.info(DISCLAIMER[lang])
+
+# ── Quick actions ─────────────────────────────────────────────────
+actions = QUICK_ACTIONS[lang]
+cols = st.columns(2)
+clicked_question = None
+for idx, (label, question) in enumerate(actions):
+    with cols[idx % 2]:
+        if st.button(label, use_container_width=True, key=f"qa_{idx}"):
+            clicked_question = question
+
+# ── Chat history display ─────────────────────────────────────────
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+        if msg["role"] == "assistant" and msg.get("sources"):
+            sources = msg["sources"]
+            label = f"\U0001f4da Sources ({len(sources)})" if lang == "en" else f"\U0001f4da Fuentes ({len(sources)})"
+            with st.expander(label):
+                for s in sources:
+                    st.markdown(
+                        f"**{s['title']}**  \n"
+                        f"Category: {s['category']} \u2022 Language: {s['language'].upper()}  \n"
+                        f"[View on ACLU]({s['url']})" if s.get("url") else
+                        f"**{s['title']}**  \nCategory: {s['category']} \u2022 Language: {s['language'].upper()}"
+                    )
+        if msg["role"] == "assistant" and msg.get("elapsed"):
+            st.caption(f"\u23f1\ufe0f {msg['elapsed']:.1f}s")
+
+# ── Chat input ────────────────────────────────────────────────────
+user_input = st.chat_input(PLACEHOLDER[lang])
+
+# A quick-action click acts like typing the question.
+question = clicked_question or user_input
+
+if question:
+    # Show the user message.
+    st.session_state.messages.append({"role": "user", "content": question})
+    with st.chat_message("user"):
+        st.markdown(question)
+
+    # Generate the answer.
+    with st.chat_message("assistant"):
+        thinking = (
+            "Searching verified sources and generating answer..."
+            if lang == "en"
+            else "Buscando fuentes verificadas y generando respuesta..."
+        )
+        with st.spinner(thinking):
+            try:
+                start = time.time()
+                answer, sources = answer_question(
+                    question, language=lang, n_results=5,
+                )
+                elapsed = time.time() - start
+            except Exception as exc:
+                err_msg = str(exc).lower()
+                if "429" in err_msg or "resource_exhausted" in err_msg or "rate limit" in err_msg:
+                    answer = (
+                        "\u23f3 The service is temporarily busy. Please wait about 60 seconds and try again."
+                        if lang == "en"
+                        else "\u23f3 El servicio est\u00e1 temporalmente ocupado. Espere unos 60 segundos e int\u00e9ntelo de nuevo."
+                    )
+                else:
+                    answer = (
+                        f"An error occurred: {exc}. Please try again."
+                        if lang == "en"
+                        else f"Ocurri\u00f3 un error: {exc}. Int\u00e9ntelo de nuevo."
+                    )
+                sources = []
+                elapsed = 0.0
+
+        st.markdown(answer)
+
+        if sources:
+            label = f"\U0001f4da Sources ({len(sources)})" if lang == "en" else f"\U0001f4da Fuentes ({len(sources)})"
+            with st.expander(label):
+                for s in sources:
+                    st.markdown(
+                        f"**{s['title']}**  \n"
+                        f"Category: {s['category']} \u2022 Language: {s['language'].upper()}  \n"
+                        f"[View on ACLU]({s['url']})" if s.get("url") else
+                        f"**{s['title']}**  \nCategory: {s['category']} \u2022 Language: {s['language'].upper()}"
+                    )
+
+        if elapsed:
+            st.caption(f"\u23f1\ufe0f {elapsed:.1f}s")
+
+    # Persist the assistant message.
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": answer,
+        "sources": sources,
+        "elapsed": elapsed,
+    })
