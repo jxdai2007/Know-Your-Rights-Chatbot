@@ -93,19 +93,19 @@ Three layers of protection:
 
 ### "What's the tech stack?"
 
-- **Google Gemini 2.0 Flash** — LLM for answer generation
+- **Google Gemini 3 Pro** — LLM for answer generation + multimodal image analysis
 - **Gemini Embeddings** (gemini-embedding-001, 768 dimensions) — semantic search
 - **ChromaDB** — persistent vector database with cosine similarity
 - **Streamlit** — responsive web frontend
+- **Flask + Twilio** — WhatsApp bot with image recognition and conversation memory
 - **Python** — end-to-end pipeline (PDF extraction, chunking, RAG)
 
 ### "What would you add with more time?"
 
 1. **More languages** — Mandarin, Arabic, Vietnamese, Haitian Creole
-2. **SMS/WhatsApp integration** — reach people without smartphones or internet
-3. **Offline mode** — critical for areas with limited connectivity
-4. **Local legal aid finder** — connect users with nearby immigration attorneys
-5. **Voice input** — for users with limited literacy
+2. **Offline mode** — critical for areas with limited connectivity
+3. **Local legal aid finder** — connect users with nearby immigration attorneys
+4. **Voice input** — for users with limited literacy
 
 ---
 
