@@ -1,3 +1,2 @@
-Remove the limit for AFC max remote calls (for the sake of the hackathon)
-The frontend displays that the whatsapp number is unknown however all messages go to +14155238886. This error is likely due to the fact that the old system used SMS and required the user to provide their own phone number. For the sake of this deployment use +14155238886 as the number.
-Add a theme button on the home page allowing the user to decide between light and dark theme.
+For the demo make sure the user is put on cooldown from sending new messages until the previous message is done processing and a response is sent back.
+Check that the changes to the bots frontend didn't impact the whatsapp integration

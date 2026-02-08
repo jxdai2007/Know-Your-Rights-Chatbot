@@ -1,88 +1,93 @@
 """
-app.py — Streamlit frontend for the Know Your Rights chatbot.
+app.py — Know Your Rights landing page.
+
+Single-page dark-themed site that drives users to WhatsApp,
+with a secondary chat demo powered by the RAG engine.
 """
 
-import os
+import base64
 import time
+from io import BytesIO
 
+import qrcode
 import streamlit as st
 
 from src.rag_engine import answer_question
-from src.whatsapp_bot import get_log_stats, LOG_FILE
 
-# ── Page config ───────────────────────────────────────────────────
+# ── Page config ──────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Know Your Rights",
     page_icon="\U0001f6e1\ufe0f",
-    layout="centered",
-    initial_sidebar_state="expanded",
+    layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
-# ── Session state defaults ────────────────────────────────────────
+# ── Session state ────────────────────────────────────────────────────
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "language" not in st.session_state:
     st.session_state.language = "en"
 if "processing" not in st.session_state:
     st.session_state.processing = False
-if "dark_mode" not in st.session_state:
-    st.session_state.dark_mode = False
 
-# ── Dark theme CSS ────────────────────────────────────────────────
-DARK_THEME_CSS = """
-<style>
-    .stApp { background-color: #0e1117; color: #fafafa; }
-    .stChatMessage { background-color: #1a1d24; }
-    .stMarkdown, .stMarkdown p, .stMarkdown li { color: #fafafa; }
-    header[data-testid="stHeader"] { background-color: #0e1117; }
-    .stSidebar, section[data-testid="stSidebar"] { background-color: #161b22; }
-    .stSidebar .stMarkdown, .stSidebar .stMarkdown p { color: #e6edf3; }
-    div[data-testid="stExpander"] { background-color: #161b22; border-color: #30363d; }
-    .stTabs [data-baseweb="tab-list"] { background-color: #0e1117; }
-    .stTabs [data-baseweb="tab"] { color: #fafafa; }
-    .stDivider { border-color: #30363d; }
-    .stChatInput input, .stChatInput textarea { background-color: #1a1d24; color: #fafafa; }
-</style>
-"""
+lang = st.session_state.language
 
-LIGHT_THEME_CSS = """
-<style>
-    .stApp { background-color: #ffffff; color: #262730; }
-</style>
-"""
+# ── Constants ────────────────────────────────────────────────────────
+WA_NUMBER = "+1 (415) 523-8886"
+WA_LINK = "https://wa.me/14155238886?text=Hi"
 
-if st.session_state.dark_mode:
-    st.markdown(DARK_THEME_CSS, unsafe_allow_html=True)
-else:
-    st.markdown(LIGHT_THEME_CSS, unsafe_allow_html=True)
-
-# ── Quick-action definitions per language ─────────────────────────
-QUICK_ACTIONS = {
+RIGHTS_CARDS = {
     "en": [
-        ("\U0001f6aa What if ICE comes to my door?", "What are my rights if ICE comes to my door?"),
-        ("\U0001f46e Rights when stopped by police", "What are my rights when stopped by police?"),
-        ("\U0001f910 Can I refuse to answer questions?", "Can I refuse to answer questions from immigration agents?"),
-        ("\U0001faaa Do I need to show ID?", "Do I need to show identification to police or immigration agents?"),
+        ("\U0001f6aa", "ICE at Your Door",
+         "You do NOT have to open the door without a warrant signed by a judge"),
+        ("\U0001f910", "Right to Remain Silent",
+         "You have the right to remain silent. Use it."),
+        ("\u2696\ufe0f", "Right to a Lawyer",
+         "You have the right to speak with a lawyer before answering questions"),
+        ("\U0001f6ab", "Refuse Entry",
+         "You can say: \u201cI do not consent to your entry or search\u201d"),
+        ("\U0001f46e", "Police Stops",
+         "You can ask: \u201cAm I free to go?\u201d If yes, calmly leave"),
+        ("\U0001f4f1", "Document Everything",
+         "Film police encounters. It\u2019s your right."),
+        ("\U0001faaa", "ID Requirements",
+         "Only show ID to police if driving. Otherwise, check your state laws."),
+        ("\U0001f310", "Language Rights",
+         "You have the right to an interpreter"),
     ],
     "es": [
-        ("\U0001f6aa \u00bfQu\u00e9 pasa si ICE viene a mi puerta?", "\u00bfCu\u00e1les son mis derechos si ICE viene a mi puerta?"),
-        ("\U0001f46e Derechos al ser detenido por la polic\u00eda", "\u00bfCu\u00e1les son mis derechos cuando me detiene la polic\u00eda?"),
-        ("\U0001f910 \u00bfPuedo negarme a responder preguntas?", "\u00bfPuedo negarme a responder preguntas de agentes de inmigraci\u00f3n?"),
-        ("\U0001faaa \u00bfNecesito mostrar identificaci\u00f3n?", "\u00bfNecesito mostrar identificaci\u00f3n a la polic\u00eda o agentes de inmigraci\u00f3n?"),
+        ("\U0001f6aa", "ICE en Su Puerta",
+         "NO tiene que abrir la puerta sin una orden firmada por un juez"),
+        ("\U0001f910", "Derecho a Guardar Silencio",
+         "Tiene derecho a guardar silencio. \u00daselo."),
+        ("\u2696\ufe0f", "Derecho a un Abogado",
+         "Tiene derecho a hablar con un abogado antes de responder preguntas"),
+        ("\U0001f6ab", "Rechazar Entrada",
+         "Puede decir: \u201cNo doy consentimiento para que entre o registre\u201d"),
+        ("\U0001f46e", "Paradas Policiales",
+         "Puede preguntar: \u201c\u00bfSoy libre de irme?\u201d Si s\u00ed, v\u00e1yase con calma"),
+        ("\U0001f4f1", "Documente Todo",
+         "Filmar encuentros policiales es su derecho."),
+        ("\U0001faaa", "Requisitos de ID",
+         "Solo muestre ID si conduce. De lo contrario, consulte las leyes de su estado."),
+        ("\U0001f310", "Derechos de Idioma",
+         "Tiene derecho a un int\u00e9rprete"),
     ],
 }
 
-DISCLAIMER = {
-    "en": (
-        "\u26a0\ufe0f **Disclaimer:** This tool provides general information only, "
-        "**not legal advice**. For guidance on your specific situation, please "
-        "consult a qualified immigration attorney."
-    ),
-    "es": (
-        "\u26a0\ufe0f **Aviso:** Esta herramienta proporciona informaci\u00f3n general "
-        "solamente, **no es asesoramiento legal**. Para orientaci\u00f3n sobre su "
-        "situaci\u00f3n espec\u00edfica, consulte con un abogado de inmigraci\u00f3n calificado."
-    ),
+QUICK_ACTIONS = {
+    "en": [
+        ("\U0001f6aa ICE at my door", "What are my rights if ICE comes to my door?"),
+        ("\U0001f46e Police stops", "What are my rights when stopped by police?"),
+        ("\U0001f910 Refuse questions", "Can I refuse to answer questions from immigration agents?"),
+        ("\U0001faaa Show ID?", "Do I need to show identification to police or immigration agents?"),
+    ],
+    "es": [
+        ("\U0001f6aa ICE en mi puerta", "\u00bfCu\u00e1les son mis derechos si ICE viene a mi puerta?"),
+        ("\U0001f46e Parada policial", "\u00bfCu\u00e1les son mis derechos cuando me detiene la polic\u00eda?"),
+        ("\U0001f910 Negarme a responder", "\u00bfPuedo negarme a responder preguntas de agentes de inmigraci\u00f3n?"),
+        ("\U0001faaa \u00bfMostrar ID?", "\u00bfNecesito mostrar identificaci\u00f3n a la polic\u00eda o agentes de inmigraci\u00f3n?"),
+    ],
 }
 
 PLACEHOLDER = {
@@ -91,11 +96,23 @@ PLACEHOLDER = {
 }
 
 
-# ── Helpers ───────────────────────────────────────────────────────
+# ── Helpers ──────────────────────────────────────────────────────────
+@st.cache_data
+def _generate_qr(url: str) -> str:
+    """Generate a QR code as a base64 PNG data URI."""
+    qr = qrcode.QRCode(version=1, box_size=6, border=2)
+    qr.add_data(url)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="#25D366", back_color="#1f2937")
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    return f"data:image/png;base64,{b64}"
+
+
 def _should_suppress_sources(answer: str, sources: list[dict]) -> bool:
     """True if sources should be hidden (fallback, greeting, or no citations)."""
     low = answer.lower()
-    # Explicit fallback phrases (off-topic or no-info responses).
     if any(p in low for p in [
         "don't have verified information",
         "no tengo informacion verificada",
@@ -105,8 +122,6 @@ def _should_suppress_sources(answer: str, sources: list[dict]) -> bool:
         return True
     if not sources:
         return True
-    # If the answer doesn't reference any source material, suppress sources.
-    # The system prompt instructs: cite with "According to ACLU" or source title.
     mentions_aclu = "aclu" in low
     mentions_title = any(
         s["title"].lower() in low
@@ -115,10 +130,10 @@ def _should_suppress_sources(answer: str, sources: list[dict]) -> bool:
     return not mentions_aclu and not mentions_title
 
 
-def _render_sources(sources: list[dict], lang: str) -> None:
+def _render_sources(sources: list[dict], display_lang: str) -> None:
     """Render the expandable sources section."""
     label = (
-        f"\U0001f4da Sources ({len(sources)})" if lang == "en"
+        f"\U0001f4da Sources ({len(sources)})" if display_lang == "en"
         else f"\U0001f4da Fuentes ({len(sources)})"
     )
     with st.expander(label):
@@ -133,150 +148,334 @@ def _render_sources(sources: list[dict], lang: str) -> None:
             )
 
 
-# ── Sidebar ───────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("### \U0001f30d Language / Idioma")
-    lang_choice = st.radio(
-        "Select language",
-        options=["English \U0001f1fa\U0001f1f8", "Espa\u00f1ol \U0001f1f2\U0001f1fd"],
-        index=0 if st.session_state.language == "en" else 1,
-        label_visibility="collapsed",
+# ── Global CSS ───────────────────────────────────────────────────────
+GLOBAL_CSS = """
+<style>
+    /* ── Hide Streamlit chrome ────────────────────────────────── */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    [data-testid="stSidebar"] {display: none !important;}
+    [data-testid="collapsedControl"] {display: none !important;}
+    header[data-testid="stHeader"] {background: transparent !important;}
+
+    /* ── Base ─────────────────────────────────────────────────── */
+    .stApp {
+        background: linear-gradient(180deg, #0f1419 0%, #1a1f2e 100%);
+        color: #ffffff;
+    }
+
+    /* ── Typography — force all text light ────────────────────── */
+    .stMarkdown, .stMarkdown p, .stMarkdown li,
+    .stMarkdown h1, .stMarkdown h2, .stMarkdown h3, .stMarkdown h4,
+    .stMarkdown strong, .stMarkdown em,
+    .stMarkdown a,
+    label, [data-testid="stWidgetLabel"] p { color: #ffffff !important; }
+    [data-testid="stCaptionContainer"] p { color: #6b7280 !important; }
+
+    /* ── Hero ─────────────────────────────────────────────────── */
+    .hero-container {
+        text-align: center;
+        padding: 3rem 1rem 4rem 1rem;
+    }
+    .hero-icon { font-size: 5rem; margin-bottom: 1rem; }
+    .hero-title {
+        font-size: 4rem; font-weight: 800;
+        color: #ffffff !important;
+        margin: 0 0 0.5rem 0; line-height: 1.1;
+    }
+    .hero-subtitle {
+        font-size: 1.5rem; color: #9ca3af !important;
+        margin: 0 0 2.5rem 0; font-weight: 400;
+    }
+    .hero-cta {
+        display: inline-block;
+        background-color: #25D366; color: #ffffff !important;
+        padding: 1rem 2.5rem; border-radius: 50px;
+        font-size: 1.25rem; font-weight: 700;
+        text-decoration: none !important;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(37,211,102,0.3);
+    }
+    .hero-cta:hover {
+        background-color: #1fb855;
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(37,211,102,0.4);
+        color: #ffffff !important;
+    }
+    .hero-secondary {
+        color: #6b7280 !important;
+        margin-top: 1.5rem; font-size: 1rem;
+    }
+
+    /* ── Section headers ──────────────────────────────────────── */
+    .section-header {
+        text-align: center; font-size: 2rem; font-weight: 700;
+        color: #ffffff !important; margin: 4rem 0 0.75rem 0;
+    }
+    .section-divider {
+        width: 60px; height: 3px;
+        background: #25D366;
+        margin: 0 auto 2rem auto; border-radius: 2px;
+    }
+
+    /* ── Rights carousel ──────────────────────────────────────── */
+    .carousel-container {
+        overflow: hidden; width: 100%;
+        padding: 1rem 0; margin: 0;
+    }
+    .carousel-track {
+        display: flex; gap: 1.25rem;
+        animation: carousel-scroll 45s linear infinite;
+        width: max-content;
+    }
+    .carousel-track:hover { animation-play-state: paused; }
+    @keyframes carousel-scroll {
+        0%   { transform: translateX(0); }
+        100% { transform: translateX(-50%); }
+    }
+    .carousel-card {
+        min-width: 280px; max-width: 280px;
+        background: #1f2937; border: 1px solid #374151;
+        border-radius: 12px; padding: 1.5rem;
+        transition: all 0.3s ease; flex-shrink: 0;
+    }
+    .carousel-card:hover {
+        border-color: #25D366; transform: translateY(-4px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+    }
+    .card-emoji { font-size: 2.5rem; margin-bottom: 0.75rem; }
+    .card-title {
+        font-size: 1.1rem; font-weight: 700;
+        color: #ffffff; margin-bottom: 0.5rem;
+    }
+    .card-desc {
+        font-size: 0.95rem; color: #d1d5db; line-height: 1.5;
+    }
+
+    /* ── Chat demo ────────────────────────────────────────────── */
+    .stChatMessage {
+        background-color: #1f2937 !important;
+        border: 1px solid #374151; border-radius: 12px !important;
+    }
+    .stChatMessage p, .stChatMessage li { color: #ffffff !important; }
+    .stChatInput > div { background-color: #1f2937 !important; }
+    .stChatInput input, .stChatInput textarea {
+        background-color: #1f2937 !important;
+        color: #ffffff !important; border-color: #374151 !important;
+    }
+
+    /* ── Buttons ──────────────────────────────────────────────── */
+    .stButton > button {
+        background-color: #1f2937 !important; color: #ffffff !important;
+        border: 1px solid #374151 !important; border-radius: 8px !important;
+        transition: all 0.3s ease;
+    }
+    .stButton > button:hover {
+        background-color: #374151 !important;
+        border-color: #25D366 !important; color: #ffffff !important;
+    }
+    .stButton > button:disabled {
+        background-color: #111827 !important; color: #4b5563 !important;
+        border-color: #1f2937 !important;
+    }
+
+    /* ── Card grid (equal-height columns) ────────────────────── */
+    .card-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.25rem;
+        margin: 0 auto;
+    }
+    @media (max-width: 768px) {
+        .card-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── Step / Why cards ─────────────────────────────────────── */
+    .step-card, .why-card {
+        background: #1f2937; border: 1px solid #374151;
+        border-radius: 12px; padding: 2rem 1.5rem;
+        text-align: center;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: flex-start;
+    }
+    .step-number {
+        display: inline-block; width: 40px; height: 40px;
+        line-height: 40px; border-radius: 50%;
+        background: #25D366; color: #ffffff;
+        font-weight: 700; font-size: 1.1rem; margin-bottom: 1rem;
+    }
+    .step-icon, .why-icon { font-size: 2.5rem; margin-bottom: 0.75rem; }
+    .step-title, .why-title {
+        font-size: 1.1rem; font-weight: 700;
+        color: #ffffff; margin-bottom: 0.5rem;
+    }
+    .step-desc, .why-desc {
+        color: #9ca3af; font-size: 0.95rem; line-height: 1.5;
+    }
+
+    /* ── WhatsApp nudge ───────────────────────────────────────── */
+    .wa-nudge {
+        background: linear-gradient(135deg, #1a3a2a 0%, #1f2937 100%);
+        border: 1px solid #25D366; border-radius: 12px;
+        padding: 1.25rem; text-align: center; margin: 1rem 0;
+    }
+    .wa-nudge a {
+        color: #25D366 !important; text-decoration: none; font-weight: 600;
+    }
+    .wa-nudge a:hover { text-decoration: underline; }
+
+    /* ── Alert boxes ──────────────────────────────────────────── */
+    [data-testid="stAlert"] {
+        background-color: #1f2937 !important; border-color: #374151 !important;
+    }
+    [data-testid="stAlert"] p { color: #d1d5db !important; }
+
+    /* ── Expanders ────────────────────────────────────────────── */
+    div[data-testid="stExpander"] {
+        background-color: #1f2937 !important; border-color: #374151 !important;
+    }
+    div[data-testid="stExpander"] summary { color: #9ca3af !important; }
+    div[data-testid="stExpander"] p { color: #d1d5db !important; }
+
+    /* ── Code blocks ──────────────────────────────────────────── */
+    .stCode, code, .stCodeBlock {
+        background-color: #1f2937 !important; color: #25D366 !important;
+    }
+
+    /* ── Dividers ─────────────────────────────────────────────── */
+    .stDivider, hr { border-color: #374151 !important; }
+
+    /* ── Spinner ──────────────────────────────────────────────── */
+    .stSpinner > div { color: #25D366 !important; }
+
+    /* ── Footer ───────────────────────────────────────────────── */
+    .footer-section {
+        text-align: center; padding: 2rem 0; color: #6b7280;
+    }
+    .footer-section p { color: #6b7280 !important; }
+    .footer-section strong { color: #9ca3af !important; }
+
+    /* ── Responsive ───────────────────────────────────────────── */
+    @media (max-width: 768px) {
+        .hero-title { font-size: 2.5rem; }
+        .hero-subtitle { font-size: 1.1rem; }
+        .hero-cta { padding: 0.75rem 2rem; font-size: 1rem; }
+        .carousel-card { min-width: 240px; max-width: 240px; }
+    }
+</style>
+"""
+st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
+
+
+# =====================================================================
+#  SECTION 1: HERO
+# =====================================================================
+hero_title = "Know Your Rights" if lang == "en" else "Conozca Sus Derechos"
+hero_subtitle = (
+    "Immigration Rights Assistant via WhatsApp" if lang == "en"
+    else "Asistente de Derechos de Inmigraci\u00f3n por WhatsApp"
+)
+hero_cta = (
+    "\U0001f4ac Get Started on WhatsApp" if lang == "en"
+    else "\U0001f4ac Comience en WhatsApp"
+)
+hero_secondary = (
+    "Or try the demo below \u2193" if lang == "en"
+    else "O pruebe la demostraci\u00f3n abajo \u2193"
+)
+
+st.markdown(f"""
+<div class="hero-container">
+    <div class="hero-icon">\U0001f6e1\ufe0f</div>
+    <h1 class="hero-title">{hero_title}</h1>
+    <p class="hero-subtitle">{hero_subtitle}</p>
+    <a href="{WA_LINK}" target="_blank" class="hero-cta">{hero_cta}</a>
+    <p class="hero-secondary">{hero_secondary}</p>
+</div>
+""", unsafe_allow_html=True)
+
+
+# =====================================================================
+#  SECTION 2: RIGHTS CAROUSEL
+# =====================================================================
+section_title = (
+    "Your Rights at a Glance" if lang == "en"
+    else "Sus Derechos de un Vistazo"
+)
+st.markdown(
+    f'<div class="section-header">{section_title}</div>'
+    '<div class="section-divider"></div>',
+    unsafe_allow_html=True,
+)
+
+# Build cards HTML (duplicated for seamless infinite loop).
+cards_html = ""
+for emoji, title, desc in RIGHTS_CARDS[lang]:
+    cards_html += (
+        f'<div class="carousel-card">'
+        f'<div class="card-emoji">{emoji}</div>'
+        f'<div class="card-title">{title}</div>'
+        f'<div class="card-desc">{desc}</div>'
+        f'</div>'
     )
-    new_lang = "en" if lang_choice.startswith("English") else "es"
-    if new_lang != st.session_state.language:
-        st.session_state.language = new_lang
-        st.rerun()
-
-    st.divider()
-
-    # Conversation history summary.
-    pairs = [
-        (st.session_state.messages[i], st.session_state.messages[i + 1])
-        for i in range(0, len(st.session_state.messages) - 1, 2)
-        if st.session_state.messages[i]["role"] == "user"
-    ]
-    if pairs:
-        st.markdown("### \U0001f4ac History" if st.session_state.language == "en" else "### \U0001f4ac Historial")
-        for q, _a in pairs[-5:]:
-            st.markdown(f"- {q['content'][:60]}{'...' if len(q['content']) > 60 else ''}")
-
-        if st.button(
-            "\U0001f5d1\ufe0f Clear conversation" if st.session_state.language == "en"
-            else "\U0001f5d1\ufe0f Borrar conversaci\u00f3n"
-        ):
-            st.session_state.messages = []
-            st.rerun()
-
-    st.divider()
-
-    with st.expander(
-        "\u2139\ufe0f About this tool" if st.session_state.language == "en"
-        else "\u2139\ufe0f Acerca de esta herramienta"
-    ):
-        if st.session_state.language == "en":
-            st.markdown(
-                "This assistant uses **Retrieval-Augmented Generation (RAG)** "
-                "to answer immigration rights questions using only verified "
-                "content from **ACLU Know Your Rights** guides.\n\n"
-                "**How it works:** Your question is matched against 154 "
-                "knowledge chunks from 11 ACLU documents (6 English, 5 Spanish) "
-                "using semantic search. The most relevant passages are sent to "
-                "Google Gemini to generate an accurate, cited answer.\n\n"
-                "\u26a0\ufe0f This is **not legal advice**. Always consult an "
-                "immigration attorney for your specific situation."
-            )
-        else:
-            st.markdown(
-                "Este asistente utiliza **Generaci\u00f3n Aumentada por "
-                "Recuperaci\u00f3n (RAG)** para responder preguntas sobre derechos "
-                "de inmigraci\u00f3n usando solo contenido verificado de las gu\u00edas "
-                "**ACLU Conozca Sus Derechos**.\n\n"
-                "**C\u00f3mo funciona:** Su pregunta se compara con 154 fragmentos "
-                "de conocimiento de 11 documentos de la ACLU (6 en ingl\u00e9s, "
-                "5 en espa\u00f1ol) mediante b\u00fasqueda sem\u00e1ntica. Los pasajes m\u00e1s "
-                "relevantes se env\u00edan a Google Gemini para generar una "
-                "respuesta precisa y citada.\n\n"
-                "\u26a0\ufe0f Esto **no es asesoramiento legal**. Siempre consulte "
-                "con un abogado de inmigraci\u00f3n para su situaci\u00f3n espec\u00edfica."
-            )
-
-    st.divider()
-    st.caption(
-        "Powered by ACLU Know Your Rights guides \u2022 "
-        "Built with Gemini & ChromaDB"
-    )
-
-# ── Header ────────────────────────────────────────────────────────
-lang = st.session_state.language
-
-header_col, theme_col = st.columns([5, 1])
-with header_col:
-    st.markdown("# \U0001f6e1\ufe0f Know Your Rights" if lang == "en" else "# \U0001f6e1\ufe0f Conozca Sus Derechos")
-with theme_col:
-    st.markdown("")  # spacing
-    theme_label = "Dark" if not st.session_state.dark_mode else "Light"
-    if st.button(f"{theme_label}", key="theme_toggle", use_container_width=True):
-        st.session_state.dark_mode = not st.session_state.dark_mode
-        st.rerun()
 
 st.markdown(
-    "*Immigration Rights Information Assistant*" if lang == "en"
-    else "*Asistente de Informaci\u00f3n sobre Derechos de Inmigraci\u00f3n*"
+    f'<div class="carousel-container">'
+    f'<div class="carousel-track">{cards_html}{cards_html}</div>'
+    f'</div>',
+    unsafe_allow_html=True,
 )
-st.info(DISCLAIMER[lang])
 
-# ── Tabs ─────────────────────────────────────────────────────────
-tab_chat, tab_wa = st.tabs([
-    "Chat" if lang == "en" else "Chat",
-    "WhatsApp" if lang == "en" else "WhatsApp",
-])
 
-# ── Tab 1: Chat ──────────────────────────────────────────────────
-with tab_chat:
-    # Quick actions (disabled while processing).
+# =====================================================================
+#  SECTION 3: CHAT DEMO
+# =====================================================================
+section_title = "Try It Out" if lang == "en" else "Pru\u00e9belo"
+st.markdown(
+    f'<div class="section-header">{section_title}</div>'
+    '<div class="section-divider"></div>',
+    unsafe_allow_html=True,
+)
+
+# Center the chat in a narrower column.
+_, chat_col, _ = st.columns([1, 2, 1])
+
+with chat_col:
+    # Quick-action buttons.
     actions = QUICK_ACTIONS[lang]
-    cols = st.columns(2)
+    btn_cols = st.columns(2)
     clicked_question = None
     for idx, (label, question) in enumerate(actions):
-        with cols[idx % 2]:
+        with btn_cols[idx % 2]:
             if st.button(
-                label,
-                use_container_width=True,
-                key=f"qa_{idx}",
-                disabled=st.session_state.processing,
+                label, use_container_width=True,
+                key=f"qa_{idx}", disabled=st.session_state.processing,
             ):
                 clicked_question = question
 
-    # Chat history display.
-    for msg in st.session_state.messages:
+    # Show last 3 exchanges (6 messages) only.
+    display_msgs = st.session_state.messages[-6:]
+    for msg in display_msgs:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             if msg["role"] == "assistant" and msg.get("sources"):
                 _render_sources(msg["sources"], lang)
-            if msg["role"] == "assistant" and msg.get("elapsed"):
-                st.caption(f"\u23f1\ufe0f {msg['elapsed']:.1f}s")
 
     # Chat input.
     user_input = st.chat_input(PLACEHOLDER[lang])
-
-    # A quick-action click acts like typing the question.
     question = clicked_question or user_input
 
     if question:
-        # Lock buttons while generating.
         st.session_state.processing = True
-
-        # Show the user message.
         st.session_state.messages.append({"role": "user", "content": question})
+
         with st.chat_message("user"):
             st.markdown(question)
 
-        # Generate the answer.
         with st.chat_message("assistant"):
             thinking = (
-                "Searching verified sources and generating answer..."
-                if lang == "en"
-                else "Buscando fuentes verificadas y generando respuesta..."
+                "Searching verified sources..." if lang == "en"
+                else "Buscando fuentes verificadas..."
             )
             with st.spinner(thinking):
                 try:
@@ -287,185 +486,220 @@ with tab_chat:
                     elapsed = time.time() - start
                 except Exception as exc:
                     err_msg = str(exc).lower()
-                    if "429" in err_msg or "resource_exhausted" in err_msg or "rate limit" in err_msg:
+                    if "429" in err_msg or "resource_exhausted" in err_msg:
                         answer = (
-                            "\u23f3 The service is temporarily busy. Please wait about 60 seconds and try again."
+                            "\u23f3 Service temporarily busy. Wait ~60 s and try again."
                             if lang == "en"
-                            else "\u23f3 El servicio est\u00e1 temporalmente ocupado. Espere unos 60 segundos e int\u00e9ntelo de nuevo."
+                            else "\u23f3 Servicio ocupado. Espere ~60 s e int\u00e9ntelo de nuevo."
                         )
                     else:
                         answer = (
-                            f"An error occurred: {exc}. Please try again."
-                            if lang == "en"
-                            else f"Ocurri\u00f3 un error: {exc}. Int\u00e9ntelo de nuevo."
+                            f"An error occurred: {exc}" if lang == "en"
+                            else f"Ocurri\u00f3 un error: {exc}"
                         )
                     sources = []
                     elapsed = 0.0
 
-            # Bug fix: suppress sources when the LLM declined to answer.
             if _should_suppress_sources(answer, sources):
                 sources = []
 
             st.markdown(answer)
-
             if sources:
                 _render_sources(sources, lang)
 
-            if elapsed:
-                st.caption(f"\u23f1\ufe0f {elapsed:.1f}s")
-
-        # Persist the assistant message (sources already cleared if fallback).
         st.session_state.messages.append({
-            "role": "assistant",
-            "content": answer,
-            "sources": sources,
-            "elapsed": elapsed,
+            "role": "assistant", "content": answer,
+            "sources": sources, "elapsed": elapsed,
         })
-
-        # Unlock buttons.
         st.session_state.processing = False
         st.rerun()
 
-# ── Tab 2: WhatsApp Access ───────────────────────────────────────
-with tab_wa:
-    wa_number = os.getenv("TWILIO_WHATSAPP_NUMBER", "whatsapp:+14155238886")
-    # Strip the "whatsapp:" prefix for display.
-    wa_display = wa_number.replace("whatsapp:", "")
-
-    if lang == "en":
-        st.markdown("### Message us on WhatsApp for instant answers")
-        st.markdown(
-            "Get immigration rights information directly on WhatsApp — "
-            "the app millions already use every day. Rich formatting, "
-            "bilingual support, and instant responses."
+    # WhatsApp nudge after 2+ exchanges.
+    if len(st.session_state.messages) >= 4:
+        nudge = (
+            "\U0001f4a1 Get instant answers anytime \u2014 " if lang == "en"
+            else "\U0001f4a1 Respuestas instant\u00e1neas \u2014 "
         )
-    else:
-        st.markdown("### Env\u00edenos un mensaje en WhatsApp para respuestas inmediatas")
+        link_text = (
+            "continue on WhatsApp!" if lang == "en"
+            else "\u00a1contin\u00fae en WhatsApp!"
+        )
         st.markdown(
-            "Obtenga informaci\u00f3n sobre derechos de inmigraci\u00f3n directamente "
-            "en WhatsApp \u2014 la app que millones ya usan todos los d\u00edas. "
-            "Formato enriquecido, soporte biling\u00fce y respuestas instant\u00e1neas."
+            f'<div class="wa-nudge">{nudge}'
+            f'<a href="{WA_LINK}" target="_blank">{link_text}</a></div>',
+            unsafe_allow_html=True,
         )
 
-    st.success(
-        f"Message us on WhatsApp: **{wa_display}**"
-        if lang == "en"
-        else f"Escr\u00edbanos en WhatsApp: **{wa_display}**"
-    )
 
-    st.divider()
+# =====================================================================
+#  SECTION 4: WHATSAPP SETUP GUIDE
+# =====================================================================
+section_title = (
+    "Get Started on WhatsApp in 3 Steps" if lang == "en"
+    else "Comience en WhatsApp en 3 Pasos"
+)
+st.markdown(
+    f'<div class="section-header">{section_title}</div>'
+    '<div class="section-divider"></div>',
+    unsafe_allow_html=True,
+)
 
-    # ── Example messages ──────────────────────────────────────
-    st.markdown(
-        "#### Try these messages" if lang == "en"
-        else "#### Pruebe estos mensajes"
-    )
-    examples = [
-        ("What if ICE comes to my door?", "\u00bfQu\u00e9 pasa si ICE viene a mi puerta?"),
-        ("What are my rights when stopped by police?", "\u00bfCu\u00e1les son mis derechos con la polic\u00eda?"),
-        ("HELP", "HELP"),
-        ("ESPA\u00d1OL", "ENGLISH"),
-    ]
-    for en_ex, es_ex in examples:
-        ex = en_ex if lang == "en" else es_ex
-        st.code(ex, language=None)
+qr_data_uri = _generate_qr(WA_LINK)
 
-    st.divider()
+step1_t = "Open WhatsApp" if lang == "en" else "Abra WhatsApp"
+step1_d = (
+    "Open WhatsApp on your phone or use WhatsApp Web"
+    if lang == "en"
+    else "Abra WhatsApp en su tel\u00e9fono o use WhatsApp Web"
+)
+step2_t = "Message Our Number" if lang == "en" else "Env\u00ede un Mensaje"
+send_word = "Hi" if lang == "en" else "Hola"
+step2_d = (
+    f"Send <strong>{send_word}</strong> to:<br>"
+    f"<strong style='color:#25D366;font-size:1.1rem'>{WA_NUMBER}</strong>"
+)
+step3_t = "Start Asking" if lang == "en" else "Comience a Preguntar"
+step3_d = (
+    "Ask in English or Spanish:<br>"
+    "<em style='color:#25D366'>\u201cWhat if ICE comes to my door?\u201d</em><br>"
+    "<em style='color:#25D366'>\u201c\u00bfQu\u00e9 hago si me para la polic\u00eda?\u201d</em>"
+    if lang == "en"
+    else "Pregunte en ingl\u00e9s o espa\u00f1ol:<br>"
+    "<em style='color:#25D366'>\u201cWhat if ICE comes to my door?\u201d</em><br>"
+    "<em style='color:#25D366'>\u201c\u00bfQu\u00e9 hago si me para la polic\u00eda?\u201d</em>"
+)
 
-    # ── Live stats ────────────────────────────────────────────
-    st.markdown(
-        "#### WhatsApp Stats" if lang == "en"
-        else "#### Estad\u00edsticas WhatsApp"
-    )
-    stats = get_log_stats()
-    col1, col2, col3 = st.columns(3)
-    col1.metric(
-        "Today" if lang == "en" else "Hoy",
-        stats["today"],
-    )
-    col2.metric(
-        "Total" if lang == "en" else "Total",
-        stats["total"],
-    )
-    lang_breakdown = stats.get("languages", {})
-    col3.metric(
-        "Languages" if lang == "en" else "Idiomas",
-        len(lang_breakdown) if lang_breakdown else 0,
-    )
+st.markdown(
+    f'<div class="card-grid">'
+    # Step 1
+    f'<div class="step-card">'
+    f'<div class="step-number">1</div>'
+    f'<div class="step-icon">\U0001f4f1</div>'
+    f'<div class="step-title">{step1_t}</div>'
+    f'<div class="step-desc">{step1_d}</div>'
+    f'</div>'
+    # Step 2
+    f'<div class="step-card">'
+    f'<div class="step-number">2</div>'
+    f'<div class="step-icon">\U0001f4ac</div>'
+    f'<div class="step-title">{step2_t}</div>'
+    f'<div class="step-desc">{step2_d}</div>'
+    f'<img src="{qr_data_uri}" alt="QR Code" '
+    f'style="margin-top:1rem;border-radius:8px;width:140px;">'
+    f'</div>'
+    # Step 3
+    f'<div class="step-card">'
+    f'<div class="step-number">3</div>'
+    f'<div class="step-icon">\u2705</div>'
+    f'<div class="step-title">{step3_t}</div>'
+    f'<div class="step-desc">{step3_d}</div>'
+    f'</div>'
+    f'</div>',
+    unsafe_allow_html=True,
+)
 
-    st.divider()
 
-    # ── Sample conversation ───────────────────────────────────
-    st.markdown(
-        "#### Sample Conversation" if lang == "en"
-        else "#### Conversaci\u00f3n de Ejemplo"
-    )
+# =====================================================================
+#  SECTION 5: WHY WHATSAPP
+# =====================================================================
+section_title = (
+    "Why We Use WhatsApp" if lang == "en"
+    else "\u00bfPor Qu\u00e9 Usamos WhatsApp?"
+)
+st.markdown(
+    f'<div class="section-header">{section_title}</div>'
+    '<div class="section-divider"></div>',
+    unsafe_allow_html=True,
+)
 
-    sample_en = [
-        ("You", "What if ICE comes to my door?"),
-        ("Bot",
-         "\U0001f6aa If ICE is at your door:\n\n"
-         "\u2022 DO NOT open the door\n"
-         "\u2022 Ask: \"Do you have a warrant signed by a judge?\"\n"
-         "\u2022 Say: \"I do not consent to your entry\"\n"
-         "\u2022 Stay silent - you have the right\n"
-         "\u2022 Call a lawyer immediately if possible\n\n"
-         "\u26a0\ufe0f Info only, not legal advice."),
-    ]
-    sample_es = [
-        ("T\u00fa", "\u00bfQu\u00e9 pasa si ICE viene a mi puerta?"),
-        ("Bot",
-         "\U0001f6aa Si ICE est\u00e1 en su puerta:\n\n"
-         "\u2022 NO abra la puerta\n"
-         "\u2022 Pregunte: \"\u00bfTiene una orden firmada por un juez?\"\n"
-         "\u2022 Diga: \"No doy consentimiento para que entre\"\n"
-         "\u2022 Guarde silencio - tiene el derecho\n"
-         "\u2022 Llame a un abogado si es posible\n\n"
-         "\u26a0\ufe0f Info solamente, no es asesoramiento legal."),
-    ]
-    sample = sample_en if lang == "en" else sample_es
+why1_t = "Widely Used" if lang == "en" else "Uso Extendido"
+why1_d = (
+    "87% of Latino immigrants use WhatsApp daily. "
+    "We meet you where you are."
+    if lang == "en"
+    else "El 87% de los inmigrantes latinos usan WhatsApp "
+    "diariamente. Le encontramos donde est\u00e1."
+)
+why2_t = "Free &amp; Accessible" if lang == "en" else "Gratis y Accesible"
+why2_d = (
+    "No SMS fees. Works on WiFi. "
+    "Available on any smartphone."
+    if lang == "en"
+    else "Sin cargos de SMS. Funciona con WiFi. "
+    "Disponible en cualquier smartphone."
+)
+why3_t = "Private &amp; Secure" if lang == "en" else "Privado y Seguro"
+why3_d = (
+    "End-to-end encrypted. "
+    "Your questions stay private."
+    if lang == "en"
+    else "Cifrado de extremo a extremo. "
+    "Sus preguntas son privadas."
+)
 
-    for sender, text in sample:
-        if sender in ("You", "T\u00fa"):
-            with st.chat_message("user"):
-                st.markdown(text)
-        else:
-            with st.chat_message("assistant"):
-                st.markdown(text)
+st.markdown(
+    f'<div class="card-grid">'
+    f'<div class="why-card">'
+    f'<div class="why-icon">\U0001f30d</div>'
+    f'<div class="why-title">{why1_t}</div>'
+    f'<div class="why-desc">{why1_d}</div>'
+    f'</div>'
+    f'<div class="why-card">'
+    f'<div class="why-icon">\U0001f4b8</div>'
+    f'<div class="why-title">{why2_t}</div>'
+    f'<div class="why-desc">{why2_d}</div>'
+    f'</div>'
+    f'<div class="why-card">'
+    f'<div class="why-icon">\U0001f512</div>'
+    f'<div class="why-title">{why3_t}</div>'
+    f'<div class="why-desc">{why3_d}</div>'
+    f'</div>'
+    f'</div>',
+    unsafe_allow_html=True,
+)
 
-    st.divider()
 
-    # ── How to get started ────────────────────────────────────
-    st.markdown(
-        "#### How to Get Started" if lang == "en"
-        else "#### C\u00f3mo Empezar"
-    )
+# =====================================================================
+#  SECTION 6: FOOTER
+# =====================================================================
+st.divider()
 
-    if lang == "en":
-        st.markdown(
-            f"**Step 1:** Save our number to your contacts: "
-            f"**{wa_display or '(number coming soon)'}**\n\n"
-            "**Step 2:** Open WhatsApp and send **Hi** to that number\n\n"
-            "**Step 3:** Select your language (English or Espa\u00f1ol)\n\n"
-            "**Step 4:** Start asking questions about your immigration rights!"
-        )
-    else:
-        st.markdown(
-            f"**Paso 1:** Guarde nuestro n\u00famero en sus contactos: "
-            f"**{wa_display or '(n\u00famero pr\u00f3ximamente)'}**\n\n"
-            "**Paso 2:** Abra WhatsApp y env\u00ede **Hola** a ese n\u00famero\n\n"
-            "**Paso 3:** Seleccione su idioma (English o Espa\u00f1ol)\n\n"
-            "**Paso 4:** Comience a hacer preguntas sobre sus derechos de inmigraci\u00f3n!"
-        )
+_, ft_col, _ = st.columns([1, 2, 1])
+with ft_col:
+    # Language toggle.
+    lc1, lc2 = st.columns(2)
+    with lc1:
+        if st.button(
+            "\U0001f1fa\U0001f1f8 English", use_container_width=True,
+            key="lang_en", disabled=(lang == "en"),
+        ):
+            st.session_state.language = "en"
+            st.rerun()
+    with lc2:
+        if st.button(
+            "\U0001f1f2\U0001f1fd Espa\u00f1ol", use_container_width=True,
+            key="lang_es", disabled=(lang == "es"),
+        ):
+            st.session_state.language = "es"
+            st.rerun()
 
-    with st.expander(
-        "Developer Info" if lang == "en"
-        else "Info para Desarrolladores"
-    ):
-        st.markdown(
-            "See `README.md` for developer setup instructions "
-            "(Twilio, ngrok, Flask webhook configuration)."
-            if lang == "en"
-            else "Vea `README.md` para instrucciones de configuraci\u00f3n "
-            "para desarrolladores (Twilio, ngrok, webhook de Flask)."
-        )
+disclaimer = (
+    "\u26a0\ufe0f <strong>Disclaimer:</strong> This tool provides general "
+    "information only, <strong>not legal advice</strong>. For guidance on "
+    "your specific situation, please consult a qualified immigration attorney."
+    if lang == "en"
+    else "\u26a0\ufe0f <strong>Aviso:</strong> Esta herramienta proporciona "
+    "informaci\u00f3n general solamente, <strong>no es asesoramiento legal"
+    "</strong>. Para orientaci\u00f3n sobre su situaci\u00f3n espec\u00edfica, "
+    "consulte con un abogado de inmigraci\u00f3n calificado."
+)
+
+st.markdown(
+    f'<div class="footer-section">'
+    f'<p>{disclaimer}</p>'
+    f'<p style="margin-top:1rem;">'
+    f'Powered by ACLU Know Your Rights guides \u2022 '
+    f'Built with Gemini &amp; ChromaDB'
+    f'</p></div>',
+    unsafe_allow_html=True,
+)
