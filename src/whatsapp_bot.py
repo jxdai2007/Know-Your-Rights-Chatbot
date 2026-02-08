@@ -12,15 +12,17 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import requests as http_requests
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
+from google.genai import types
 from twilio.rest import Client as TwilioClient
 from twilio.twiml.messaging_response import MessagingResponse
 
 try:
-    from src.rag_engine import answer_question
+    from src.rag_engine import answer_question, _get_genai_client, GENERATION_MODEL
 except ImportError:
-    from rag_engine import answer_question
+    from rag_engine import answer_question, _get_genai_client, GENERATION_MODEL
 
 # ── Config ────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -75,8 +77,22 @@ consult an immigration attorney."
 10. If responding in Spanish, follow the same rules in Spanish.
 11. NEVER provide legal advice — you provide information only."""
 
-# Max tokens kept small to enforce concise answers.
-URGENT_MAX_TOKENS = 256
+# Gemini 3 Pro uses dynamic thinking — reasoning tokens count against
+# max_output_tokens.  Budget enough for thinking + the visible answer.
+URGENT_MAX_TOKENS = 2048
+
+
+def _build_contextual_prompt(history: list[dict]) -> str:
+    """Build system prompt with conversation history for follow-up context."""
+    if not history:
+        return URGENT_PROMPT
+    ctx = "\n".join(f"User: {h['q']}\nBot: {h['a']}" for h in history)
+    return (
+        f"{URGENT_PROMPT}\n\n"
+        f"PREVIOUS CONVERSATION:\n{ctx}\n\n"
+        f"Use this context to understand follow-up questions."
+    )
+
 
 # ── Topic emoji (one per message, based on question keywords) ────
 TOPIC_EMOJI = {
@@ -112,11 +128,12 @@ CAPABILITIES_MSG = {
         "- Your rights if ICE comes to your door\n"
         "- Your rights when stopped by police\n"
         "- Your rights at protests\n"
-        "- Voting rights information\n\n"
+        "- Voting rights information\n"
+        "- Document/warrant analysis (send a photo!)\n\n"
         "Try asking:\n"
         "- \"What if ICE comes to my door?\"\n"
         "- \"What are my rights with police?\"\n\n"
-        "Commands: ESPAÑOL, HELP\n\n"
+        "Commands: ESPAÑOL, HELP, RESET\n\n"
         "What would you like to know?"
     ),
     "es": (
@@ -126,11 +143,12 @@ CAPABILITIES_MSG = {
         "- Sus derechos si ICE viene a su puerta\n"
         "- Sus derechos al ser detenido por la policía\n"
         "- Sus derechos en protestas\n"
-        "- Información sobre derechos de voto\n\n"
+        "- Información sobre derechos de voto\n"
+        "- Análisis de documentos/órdenes (envíe una foto!)\n\n"
         "Pruebe preguntar:\n"
         "- \"¿Qué pasa si ICE viene a mi puerta?\"\n"
         "- \"¿Cuáles son mis derechos con la policía?\"\n\n"
-        "Comandos: ENGLISH, HELP\n\n"
+        "Comandos: ENGLISH, HELP, REINICIAR\n\n"
         "¿Qué le gustaría saber?"
     ),
 }
@@ -138,7 +156,8 @@ CAPABILITIES_MSG = {
 HELP_TEXT = {
     "en": (
         "Know Your Rights\n\n"
-        "Ask any question about immigration rights.\n\n"
+        "Ask any question about immigration rights.\n"
+        "Send a PHOTO of a document for analysis.\n\n"
         "Try asking about:\n"
         "- ICE encounters and your rights\n"
         "- Police stops and your rights\n"
@@ -146,12 +165,14 @@ HELP_TEXT = {
         "Commands:\n"
         "ESPA\u00d1OL - switch to Spanish\n"
         "ENGLISH - switch to English\n"
+        "RESET - clear conversation history\n"
         "HELP - show this message\n\n"
         "Info only, not legal advice."
     ),
     "es": (
         "Conozca Sus Derechos\n\n"
-        "Haga cualquier pregunta sobre derechos de inmigraci\u00f3n.\n\n"
+        "Haga cualquier pregunta sobre derechos de inmigraci\u00f3n.\n"
+        "Envie una FOTO de un documento para analisis.\n\n"
         "Pruebe preguntar sobre:\n"
         "- Encuentros con ICE y sus derechos\n"
         "- Paradas policiales y sus derechos\n"
@@ -159,6 +180,7 @@ HELP_TEXT = {
         "Comandos:\n"
         "ENGLISH - cambiar a ingl\u00e9s\n"
         "ESPA\u00d1OL - cambiar a espa\u00f1ol\n"
+        "REINICIAR - borrar historial de conversacion\n"
         "HELP - mostrar este mensaje\n\n"
         "Info solamente, no es asesoramiento legal."
     ),
@@ -280,8 +302,125 @@ def _get_topic_emoji(text: str) -> str:
     return "\u2696\ufe0f"
 
 
+# ── Image recognition ─────────────────────────────────────────────
+IMAGE_CONTENT_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+
+IMAGE_ANALYSIS_PROMPT = """\
+Analyze this immigration-related document or image for someone who \
+needs urgent help.
+
+Provide:
+1. Document type (warrant, notice, form, ID, etc.)
+2. Key information (is it valid? what does it require?)
+3. User's rights in this situation
+4. Immediate action needed
+
+CRITICAL CHECKS for warrants:
+- Is it signed by a federal/state JUDGE? (not just an ICE officer)
+- Does it have a specific name/address?
+- Administrative warrants (ICE forms) do NOT authorize home entry.
+
+MAX 500 characters, bullet points, urgent tone.
+End with: Info only, not legal advice."""
+
+IMAGE_ANALYSIS_PROMPT_ES = """\
+Analiza este documento o imagen relacionado con inmigracion para \
+alguien que necesita ayuda urgente.
+
+Proporciona:
+1. Tipo de documento (orden judicial, notificacion, formulario, etc.)
+2. Informacion clave (es valido? que requiere?)
+3. Derechos del usuario en esta situacion
+4. Accion inmediata necesaria
+
+VERIFICACIONES CRITICAS para ordenes:
+- Esta firmada por un JUEZ federal/estatal? (no solo un oficial de ICE)
+- Tiene nombre/direccion especificos?
+- Las ordenes administrativas de ICE NO autorizan entrada al hogar.
+
+MAXIMO 500 caracteres, puntos de lista, tono urgente.
+Termina con: Solo informacion, no asesoria legal."""
+
+
+def _download_twilio_media(media_url: str) -> bytes | None:
+    """Download media from a Twilio media URL using HTTP Basic auth."""
+    try:
+        resp = http_requests.get(
+            media_url,
+            auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN),
+            timeout=15,
+        )
+        resp.raise_for_status()
+        return resp.content
+    except Exception as exc:
+        logger.error("Failed to download media from %s: %s", media_url, exc)
+        return None
+
+
+def _analyze_image(
+    image_bytes: bytes,
+    mime_type: str,
+    lang: str,
+    user_caption: str = "",
+) -> str:
+    """Analyze an image using Gemini multimodal capabilities."""
+    client = _get_genai_client()
+
+    prompt = IMAGE_ANALYSIS_PROMPT_ES if lang == "es" else IMAGE_ANALYSIS_PROMPT
+    if user_caption:
+        prompt += f"\n\nUser's question about this image: {user_caption}"
+
+    try:
+        response = client.models.generate_content(
+            model=GENERATION_MODEL,
+            contents=[
+                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                prompt,
+            ],
+            config=types.GenerateContentConfig(
+                temperature=0.3,
+                max_output_tokens=URGENT_MAX_TOKENS,
+                safety_settings=[
+                    types.SafetySetting(
+                        category="HARM_CATEGORY_HARASSMENT",
+                        threshold="BLOCK_ONLY_HIGH",
+                    ),
+                    types.SafetySetting(
+                        category="HARM_CATEGORY_HATE_SPEECH",
+                        threshold="BLOCK_ONLY_HIGH",
+                    ),
+                    types.SafetySetting(
+                        category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                        threshold="BLOCK_ONLY_HIGH",
+                    ),
+                    types.SafetySetting(
+                        category="HARM_CATEGORY_DANGEROUS_CONTENT",
+                        threshold="BLOCK_ONLY_HIGH",
+                    ),
+                ],
+            ),
+        )
+        return response.text or (
+            "No pude analizar la imagen." if lang == "es"
+            else "I couldn't analyze the image."
+        )
+    except Exception as exc:
+        logger.error("Image analysis error: %s", exc)
+        return (
+            "Error al analizar la imagen. Intente de nuevo."
+            if lang == "es"
+            else "Error analyzing the image. Please try again."
+        )
+
+
 # ── Core message handler ─────────────────────────────────────────
-def handle_message(phone: str, body: str, num_media: int = 0) -> str:
+def handle_message(
+    phone: str,
+    body: str,
+    num_media: int = 0,
+    media_url: str | None = None,
+    media_content_type: str | None = None,
+) -> str:
     """
     Process an incoming WhatsApp message and return the reply text.
     """
@@ -317,24 +456,55 @@ def handle_message(phone: str, body: str, num_media: int = 0) -> str:
 
     # ── Normal processing (already onboarded) ─────────────────
     lang = session["language"]
-    return _process_text(phone, session, text, text_upper, lang, num_media)
+    return _process_text(
+        phone, session, text, text_upper, lang,
+        num_media, media_url, media_content_type,
+    )
 
 
 def _process_text(
-    phone: str, session: dict, text: str, text_upper: str, lang: str, num_media: int
+    phone: str, session: dict, text: str, text_upper: str, lang: str,
+    num_media: int, media_url: str | None = None,
+    media_content_type: str | None = None,
 ) -> str:
     """Process a message after the welcome check."""
 
-    # ── Media handling ────────────────────────────────────────
-    if num_media > 0 and not text:
-        reply = (
-            "I can only answer text questions. Type your question."
-            if lang == "en"
-            else "Solo respondo preguntas de texto. Escriba su pregunta."
-        )
-        _update_session(phone, session)
-        _log_interaction(phone, "(media)", reply, lang)
-        return reply
+    # ── Image handling ────────────────────────────────────────
+    if num_media > 0:
+        if media_url and media_content_type in IMAGE_CONTENT_TYPES:
+            image_bytes = _download_twilio_media(media_url)
+            if image_bytes is None:
+                reply = (
+                    "Could not download the image. Please try again."
+                    if lang == "en"
+                    else "No se pudo descargar la imagen. Intente de nuevo."
+                )
+                _update_session(phone, session)
+                _log_interaction(phone, "(image download failed)", reply, lang)
+                return reply
+
+            analysis = _analyze_image(image_bytes, media_content_type, lang, text)
+            reply = "\U0001f4f7 " + analysis + DISCLAIMER[lang]
+
+            question_desc = text if text else "(image)"
+            session["history"].append({
+                "q": question_desc[:100], "a": analysis[:200],
+            })
+            session["history"] = session["history"][-5:]
+
+            _update_session(phone, session)
+            _log_interaction(phone, f"(image: {media_content_type})", reply, lang)
+            return reply
+
+        elif not text:
+            reply = (
+                "I can process text and images. Send a photo or type your question."
+                if lang == "en"
+                else "Proceso texto e imagenes. Envie una foto o escriba su pregunta."
+            )
+            _update_session(phone, session)
+            _log_interaction(phone, "(unsupported media)", reply, lang)
+            return reply
 
     # ── Rate limiting ─────────────────────────────────────────
     if _is_rate_limited(session, phone):
@@ -355,7 +525,18 @@ def _process_text(
         _log_interaction(phone, text, reply, lang)
         return reply
 
-    if text_upper in ("ESPAÑOL", "ESPANOL", "SPANISH"):
+    if text_upper in ("RESET", "REINICIAR"):
+        session["history"] = []
+        reply = (
+            "Conversation history cleared. Ask a new question."
+            if lang == "en"
+            else "Historial de conversacion borrado. Haga una nueva pregunta."
+        )
+        _update_session(phone, session)
+        _log_interaction(phone, text, reply, lang)
+        return reply
+
+    if text_upper in ("\u00c9SPANOL", "ESPANOL", "SPANISH"):
         session["language"] = "es"
         reply = "Idioma cambiado a espa\u00f1ol. Escriba HELP para opciones."
         _update_session(phone, session)
@@ -380,13 +561,14 @@ def _process_text(
         _log_interaction(phone, "", reply, lang)
         return reply
 
-    # ── RAG query with urgent prompt ──────────────────────────
+    # ── RAG query with contextual prompt ──────────────────────
     try:
+        contextual_prompt = _build_contextual_prompt(session["history"])
         answer, _sources = answer_question(
             text,
             language=lang,
             n_results=5,
-            system_prompt=URGENT_PROMPT,
+            system_prompt=contextual_prompt,
             max_output_tokens=URGENT_MAX_TOKENS,
         )
     except Exception as exc:
@@ -412,9 +594,9 @@ def _process_text(
     emoji = _get_topic_emoji(text)
     reply = emoji + " " + answer + DISCLAIMER[lang]
 
-    # ── Update conversation history (keep last 3) ─────────────
+    # ── Update conversation history (keep last 5) ─────────────
     session["history"].append({"q": text[:100], "a": answer[:200]})
-    session["history"] = session["history"][-3:]
+    session["history"] = session["history"][-5:]
 
     _update_session(phone, session)
     _log_interaction(phone, text, reply, lang)
@@ -439,10 +621,17 @@ def whatsapp_webhook():
     phone = request.form.get("From", "")
     body = request.form.get("Body", "")
     num_media = int(request.form.get("NumMedia", "0"))
+    media_url = request.form.get("MediaUrl0")
+    media_content_type = request.form.get("MediaContentType0")
 
     logger.info("Incoming WhatsApp from %s: %s", hash(phone) % 10**8, body[:50])
 
-    reply_text = handle_message(phone, body, num_media=num_media)
+    reply_text = handle_message(
+        phone, body,
+        num_media=num_media,
+        media_url=media_url,
+        media_content_type=media_content_type,
+    )
 
     # Send via REST API for better error visibility.
     try:
@@ -468,10 +657,17 @@ def test_endpoint():
     phone = data.get("phone", "whatsapp:+1TEST000000")
     body = data.get("message", "")
     num_media = data.get("num_media", 0)
+    media_url = data.get("media_url")
+    media_content_type = data.get("media_content_type")
 
     logger.info("Test WhatsApp from %s: %s", phone, body[:50])
 
-    reply_text = handle_message(phone, body, num_media=num_media)
+    reply_text = handle_message(
+        phone, body,
+        num_media=num_media,
+        media_url=media_url,
+        media_content_type=media_content_type,
+    )
     return jsonify({"reply": reply_text, "phone": phone})
 
 

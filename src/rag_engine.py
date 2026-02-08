@@ -2,8 +2,8 @@
 rag_engine.py — Core RAG query pipeline.
 
 Accepts a user question (English or Spanish), retrieves relevant chunks
-from the vector database, builds a grounded prompt, and calls Gemini 2.0
-Flash to generate a cited, safe answer.
+from the vector database, builds a grounded prompt, and calls Gemini 3
+Pro to generate a cited, safe answer.
 """
 
 import os
@@ -25,7 +25,7 @@ except ImportError:
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-GENERATION_MODEL = "gemini-2.0-flash"
+GENERATION_MODEL = "gemini-3-pro-preview"
 VALID_LANGUAGES = {"en", "es"}
 MAX_RETRIES = 5
 INITIAL_BACKOFF = 0  # seconds; Gemini 429 needs ~60s cool-down
@@ -178,7 +178,7 @@ def answer_question(
     language: str = "en",
     n_results: int = 5,
     system_prompt: str | None = None,
-    max_output_tokens: int = 1024,
+    max_output_tokens: int = 2048,
 ) -> tuple[str, list[dict]]:
     """
     End-to-end RAG pipeline: retrieve context, generate answer.
@@ -226,6 +226,24 @@ def answer_question(
             system_instruction=system_prompt or SYSTEM_PROMPT,
             temperature=0.3,
             max_output_tokens=max_output_tokens,
+            safety_settings=[
+                types.SafetySetting(
+                    category="HARM_CATEGORY_HARASSMENT",
+                    threshold="BLOCK_ONLY_HIGH",
+                ),
+                types.SafetySetting(
+                    category="HARM_CATEGORY_HATE_SPEECH",
+                    threshold="BLOCK_ONLY_HIGH",
+                ),
+                types.SafetySetting(
+                    category="HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    threshold="BLOCK_ONLY_HIGH",
+                ),
+                types.SafetySetting(
+                    category="HARM_CATEGORY_DANGEROUS_CONTENT",
+                    threshold="BLOCK_ONLY_HIGH",
+                ),
+            ],
         ),
     )
 

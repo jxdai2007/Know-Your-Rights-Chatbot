@@ -446,5 +446,89 @@
     "language": "en",
     "message_preview": "An ice agent just hit me at a protest. What should",
     "response_length": 293
+  },
+  {
+    "timestamp": "2026-02-08T11:24:14.039863+00:00",
+    "phone_hash": 92183435,
+    "language": "en",
+    "message_preview": "Help",
+    "response_length": 373
+  },
+  {
+    "timestamp": "2026-02-08T11:24:58.613438+00:00",
+    "phone_hash": 92183435,
+    "language": "en",
+    "message_preview": "(image: image/jpeg)",
+    "response_length": 79
+  },
+  {
+    "timestamp": "2026-02-08T11:25:17.573398+00:00",
+    "phone_hash": 92183435,
+    "language": "en",
+    "message_preview": "(image: image/jpeg)",
+    "response_length": 79
+  },
+  {
+    "timestamp": "2026-02-08T11:26:16.465272+00:00",
+    "phone_hash": 92183435,
+    "language": "en",
+    "message_preview": "Can you analyze this image for me",
+    "response_length": 36
+  },
+  {
+    "timestamp": "2026-02-08T11:29:42.235929+00:00",
+    "phone_hash": 23361934,
+    "language": "en",
+    "message_preview": "Hi",
+    "response_length": 68
+  },
+  {
+    "timestamp": "2026-02-08T11:30:42.078166+00:00",
+    "phone_hash": 39322573,
+    "language": "en",
+    "message_preview": "(image: image/jpeg)",
+    "response_length": 71
+  },
+  {
+    "timestamp": "2026-02-08T11:31:31.842360+00:00",
+    "phone_hash": 39322573,
+    "language": "en",
+    "message_preview": "(image: image/jpeg)",
+    "response_length": 73
+  },
+  {
+    "timestamp": "2026-02-08T11:32:17.410004+00:00",
+    "phone_hash": 39322573,
+    "language": "en",
+    "message_preview": "(image: image/jpeg)",
+    "response_length": 73
+  },
+  {
+    "timestamp": "2026-02-08T11:33:22.128650+00:00",
+    "phone_hash": 39322573,
+    "language": "en",
+    "message_preview": "(unsupported media)",
+    "response_length": 66
+  },
+  {
+    "timestamp": "2026-02-08T11:33:38.407646+00:00",
+    "phone_hash": 39322573,
+    "language": "en",
+    "message_preview": "Um can I have a kiss",
+    "response_length": 69
+  },
+  {
+    "timestamp": "2026-02-08T11:34:03.394048+00:00",
+    "phone_hash": 39322573,
+    "language": "en",
+    "message_preview": "Ice is at my door and threatening to break in what",
+    "response_length": 80
+  },
+  {
+    "timestamp": "2026-02-08T11:41:54.648540+00:00",
+    "phone_hash": 77552231,
+    "language": "en",
+    "message_preview": "Ice is at my door and threatening to break in",
+    "response_length": 316
   }
 ]
