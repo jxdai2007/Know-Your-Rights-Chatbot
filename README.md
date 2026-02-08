@@ -1,8 +1,7 @@
 # Know Your Rights
 
 Immigration Rights Information Assistant built for QWER Hacks 2025.
-TRY IT OUT --> [knowyourrights.streamlit.app](url)
-
+**[Try It Out](https://knowyourrights.streamlit.app)**
 ## Overview
 
 A bilingual (English/Spanish) RAG-powered chatbot providing accurate immigration rights information from verified ACLU sources. Available as both a web app and a WhatsApp bot — meeting vulnerable communities where they are during encounters with law enforcement and immigration officials.
