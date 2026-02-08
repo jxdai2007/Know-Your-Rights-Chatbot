@@ -21,6 +21,8 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "language" not in st.session_state:
     st.session_state.language = "en"
+if "processing" not in st.session_state:
+    st.session_state.processing = False
 
 # ── Quick-action definitions per language ─────────────────────────
 QUICK_ACTIONS = {
@@ -55,6 +57,35 @@ PLACEHOLDER = {
     "en": "Ask about your immigration rights...",
     "es": "Pregunte sobre sus derechos de inmigraci\u00f3n...",
 }
+
+
+# ── Helpers ───────────────────────────────────────────────────────
+def _is_fallback_answer(text: str) -> bool:
+    """True if the answer is the 'no verified info' fallback."""
+    low = text.lower()
+    return (
+        "don't have verified information" in low
+        or "no tengo informacion verificada" in low
+    )
+
+
+def _render_sources(sources: list[dict], lang: str) -> None:
+    """Render the expandable sources section."""
+    label = (
+        f"\U0001f4da Sources ({len(sources)})" if lang == "en"
+        else f"\U0001f4da Fuentes ({len(sources)})"
+    )
+    with st.expander(label):
+        for s in sources:
+            url = s.get("url", "")
+            link = f"  \n[View on ACLU]({url})" if url else ""
+            st.markdown(
+                f"**{s['title']}**  \n"
+                f"Category: {s['category']} \u2022 "
+                f"Language: {s['language'].upper()}"
+                f"{link}"
+            )
+
 
 # ── Sidebar ───────────────────────────────────────────────────────
 with st.sidebar:
@@ -139,13 +170,18 @@ st.markdown(
 )
 st.info(DISCLAIMER[lang])
 
-# ── Quick actions ─────────────────────────────────────────────────
+# ── Quick actions (disabled while processing) ────────────────────
 actions = QUICK_ACTIONS[lang]
 cols = st.columns(2)
 clicked_question = None
 for idx, (label, question) in enumerate(actions):
     with cols[idx % 2]:
-        if st.button(label, use_container_width=True, key=f"qa_{idx}"):
+        if st.button(
+            label,
+            use_container_width=True,
+            key=f"qa_{idx}",
+            disabled=st.session_state.processing,
+        ):
             clicked_question = question
 
 # ── Chat history display ─────────────────────────────────────────
@@ -153,16 +189,7 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         if msg["role"] == "assistant" and msg.get("sources"):
-            sources = msg["sources"]
-            label = f"\U0001f4da Sources ({len(sources)})" if lang == "en" else f"\U0001f4da Fuentes ({len(sources)})"
-            with st.expander(label):
-                for s in sources:
-                    st.markdown(
-                        f"**{s['title']}**  \n"
-                        f"Category: {s['category']} \u2022 Language: {s['language'].upper()}  \n"
-                        f"[View on ACLU]({s['url']})" if s.get("url") else
-                        f"**{s['title']}**  \nCategory: {s['category']} \u2022 Language: {s['language'].upper()}"
-                    )
+            _render_sources(msg["sources"], lang)
         if msg["role"] == "assistant" and msg.get("elapsed"):
             st.caption(f"\u23f1\ufe0f {msg['elapsed']:.1f}s")
 
@@ -173,6 +200,9 @@ user_input = st.chat_input(PLACEHOLDER[lang])
 question = clicked_question or user_input
 
 if question:
+    # Lock buttons while generating.
+    st.session_state.processing = True
+
     # Show the user message.
     st.session_state.messages.append({"role": "user", "content": question})
     with st.chat_message("user"):
@@ -209,26 +239,26 @@ if question:
                 sources = []
                 elapsed = 0.0
 
+        # Bug fix: suppress sources when the LLM declined to answer.
+        if _is_fallback_answer(answer):
+            sources = []
+
         st.markdown(answer)
 
         if sources:
-            label = f"\U0001f4da Sources ({len(sources)})" if lang == "en" else f"\U0001f4da Fuentes ({len(sources)})"
-            with st.expander(label):
-                for s in sources:
-                    st.markdown(
-                        f"**{s['title']}**  \n"
-                        f"Category: {s['category']} \u2022 Language: {s['language'].upper()}  \n"
-                        f"[View on ACLU]({s['url']})" if s.get("url") else
-                        f"**{s['title']}**  \nCategory: {s['category']} \u2022 Language: {s['language'].upper()}"
-                    )
+            _render_sources(sources, lang)
 
         if elapsed:
             st.caption(f"\u23f1\ufe0f {elapsed:.1f}s")
 
-    # Persist the assistant message.
+    # Persist the assistant message (sources already cleared if fallback).
     st.session_state.messages.append({
         "role": "assistant",
         "content": answer,
         "sources": sources,
         "elapsed": elapsed,
     })
+
+    # Unlock buttons.
+    st.session_state.processing = False
+    st.rerun()
