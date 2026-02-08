@@ -530,5 +530,19 @@
     "language": "en",
     "message_preview": "Ice is at my door and threatening to break in",
     "response_length": 316
+  },
+  {
+    "timestamp": "2026-02-08T11:49:55.344627+00:00",
+    "phone_hash": 77552231,
+    "language": "en",
+    "message_preview": "Hi",
+    "response_length": 226
+  },
+  {
+    "timestamp": "2026-02-08T11:50:05.106966+00:00",
+    "phone_hash": 77552231,
+    "language": "en",
+    "message_preview": "What was the last message I sent you",
+    "response_length": 157
   }
 ]

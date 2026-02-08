@@ -614,7 +614,7 @@ st.markdown(
 
 why1_t = "Widely Used" if lang == "en" else "Uso Extendido"
 why1_d = (
-    "87% of Latino immigrants use WhatsApp daily. "
+    "87% of Latino immigrants use WhatsApp weekly. "
     "We meet you where you are."
     if lang == "en"
     else "El 87% de los inmigrantes latinos usan WhatsApp "
