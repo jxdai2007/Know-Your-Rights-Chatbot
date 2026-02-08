@@ -156,14 +156,18 @@ def answer_question(
     question: str,
     language: str = "en",
     n_results: int = 5,
+    system_prompt: str | None = None,
+    max_output_tokens: int = 1024,
 ) -> tuple[str, list[dict]]:
     """
     End-to-end RAG pipeline: retrieve context, generate answer.
 
     Args:
-        question:  The user's question.
-        language:  "en" or "es" — filters chunks and selects fallback reply.
-        n_results: Number of chunks to retrieve from the vector DB.
+        question:          The user's question.
+        language:          "en" or "es" — filters chunks and selects fallback reply.
+        n_results:         Number of chunks to retrieve from the vector DB.
+        system_prompt:     Override the default system prompt (e.g. for WhatsApp).
+        max_output_tokens: Max tokens in the generated response.
 
     Returns:
         (answer_text, sources_list)
@@ -198,9 +202,9 @@ def answer_question(
         model=GENERATION_MODEL,
         contents=user_prompt,
         config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_PROMPT,
+            system_instruction=system_prompt or SYSTEM_PROMPT,
             temperature=0.3,
-            max_output_tokens=1024,
+            max_output_tokens=max_output_tokens,
         ),
     )
 

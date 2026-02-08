@@ -2,11 +2,13 @@
 app.py — Streamlit frontend for the Know Your Rights chatbot.
 """
 
+import os
 import time
 
 import streamlit as st
 
 from src.rag_engine import answer_question
+from src.whatsapp_bot import get_log_stats, LOG_FILE
 
 # ── Page config ───────────────────────────────────────────────────
 st.set_page_config(
@@ -170,95 +172,270 @@ st.markdown(
 )
 st.info(DISCLAIMER[lang])
 
-# ── Quick actions (disabled while processing) ────────────────────
-actions = QUICK_ACTIONS[lang]
-cols = st.columns(2)
-clicked_question = None
-for idx, (label, question) in enumerate(actions):
-    with cols[idx % 2]:
-        if st.button(
-            label,
-            use_container_width=True,
-            key=f"qa_{idx}",
-            disabled=st.session_state.processing,
-        ):
-            clicked_question = question
+# ── Tabs ─────────────────────────────────────────────────────────
+tab_chat, tab_wa = st.tabs([
+    "Chat" if lang == "en" else "Chat",
+    "WhatsApp" if lang == "en" else "WhatsApp",
+])
 
-# ── Chat history display ─────────────────────────────────────────
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
-        if msg["role"] == "assistant" and msg.get("sources"):
-            _render_sources(msg["sources"], lang)
-        if msg["role"] == "assistant" and msg.get("elapsed"):
-            st.caption(f"\u23f1\ufe0f {msg['elapsed']:.1f}s")
+# ── Tab 1: Chat ──────────────────────────────────────────────────
+with tab_chat:
+    # Quick actions (disabled while processing).
+    actions = QUICK_ACTIONS[lang]
+    cols = st.columns(2)
+    clicked_question = None
+    for idx, (label, question) in enumerate(actions):
+        with cols[idx % 2]:
+            if st.button(
+                label,
+                use_container_width=True,
+                key=f"qa_{idx}",
+                disabled=st.session_state.processing,
+            ):
+                clicked_question = question
 
-# ── Chat input ────────────────────────────────────────────────────
-user_input = st.chat_input(PLACEHOLDER[lang])
+    # Chat history display.
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            if msg["role"] == "assistant" and msg.get("sources"):
+                _render_sources(msg["sources"], lang)
+            if msg["role"] == "assistant" and msg.get("elapsed"):
+                st.caption(f"\u23f1\ufe0f {msg['elapsed']:.1f}s")
 
-# A quick-action click acts like typing the question.
-question = clicked_question or user_input
+    # Chat input.
+    user_input = st.chat_input(PLACEHOLDER[lang])
 
-if question:
-    # Lock buttons while generating.
-    st.session_state.processing = True
+    # A quick-action click acts like typing the question.
+    question = clicked_question or user_input
 
-    # Show the user message.
-    st.session_state.messages.append({"role": "user", "content": question})
-    with st.chat_message("user"):
-        st.markdown(question)
+    if question:
+        # Lock buttons while generating.
+        st.session_state.processing = True
 
-    # Generate the answer.
-    with st.chat_message("assistant"):
-        thinking = (
-            "Searching verified sources and generating answer..."
-            if lang == "en"
-            else "Buscando fuentes verificadas y generando respuesta..."
-        )
-        with st.spinner(thinking):
-            try:
-                start = time.time()
-                answer, sources = answer_question(
-                    question, language=lang, n_results=5,
-                )
-                elapsed = time.time() - start
-            except Exception as exc:
-                err_msg = str(exc).lower()
-                if "429" in err_msg or "resource_exhausted" in err_msg or "rate limit" in err_msg:
-                    answer = (
-                        "\u23f3 The service is temporarily busy. Please wait about 60 seconds and try again."
-                        if lang == "en"
-                        else "\u23f3 El servicio est\u00e1 temporalmente ocupado. Espere unos 60 segundos e int\u00e9ntelo de nuevo."
+        # Show the user message.
+        st.session_state.messages.append({"role": "user", "content": question})
+        with st.chat_message("user"):
+            st.markdown(question)
+
+        # Generate the answer.
+        with st.chat_message("assistant"):
+            thinking = (
+                "Searching verified sources and generating answer..."
+                if lang == "en"
+                else "Buscando fuentes verificadas y generando respuesta..."
+            )
+            with st.spinner(thinking):
+                try:
+                    start = time.time()
+                    answer, sources = answer_question(
+                        question, language=lang, n_results=5,
                     )
-                else:
-                    answer = (
-                        f"An error occurred: {exc}. Please try again."
-                        if lang == "en"
-                        else f"Ocurri\u00f3 un error: {exc}. Int\u00e9ntelo de nuevo."
-                    )
+                    elapsed = time.time() - start
+                except Exception as exc:
+                    err_msg = str(exc).lower()
+                    if "429" in err_msg or "resource_exhausted" in err_msg or "rate limit" in err_msg:
+                        answer = (
+                            "\u23f3 The service is temporarily busy. Please wait about 60 seconds and try again."
+                            if lang == "en"
+                            else "\u23f3 El servicio est\u00e1 temporalmente ocupado. Espere unos 60 segundos e int\u00e9ntelo de nuevo."
+                        )
+                    else:
+                        answer = (
+                            f"An error occurred: {exc}. Please try again."
+                            if lang == "en"
+                            else f"Ocurri\u00f3 un error: {exc}. Int\u00e9ntelo de nuevo."
+                        )
+                    sources = []
+                    elapsed = 0.0
+
+            # Bug fix: suppress sources when the LLM declined to answer.
+            if _is_fallback_answer(answer):
                 sources = []
-                elapsed = 0.0
 
-        # Bug fix: suppress sources when the LLM declined to answer.
-        if _is_fallback_answer(answer):
-            sources = []
+            st.markdown(answer)
 
-        st.markdown(answer)
+            if sources:
+                _render_sources(sources, lang)
 
-        if sources:
-            _render_sources(sources, lang)
+            if elapsed:
+                st.caption(f"\u23f1\ufe0f {elapsed:.1f}s")
 
-        if elapsed:
-            st.caption(f"\u23f1\ufe0f {elapsed:.1f}s")
+        # Persist the assistant message (sources already cleared if fallback).
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": answer,
+            "sources": sources,
+            "elapsed": elapsed,
+        })
 
-    # Persist the assistant message (sources already cleared if fallback).
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": answer,
-        "sources": sources,
-        "elapsed": elapsed,
-    })
+        # Unlock buttons.
+        st.session_state.processing = False
+        st.rerun()
 
-    # Unlock buttons.
-    st.session_state.processing = False
-    st.rerun()
+# ── Tab 2: WhatsApp Access ───────────────────────────────────────
+with tab_wa:
+    wa_number = os.getenv("TWILIO_WHATSAPP_NUMBER", "")
+    # Strip the "whatsapp:" prefix for display.
+    wa_display = wa_number.replace("whatsapp:", "") if wa_number else ""
+
+    if lang == "en":
+        st.markdown("### Message us on WhatsApp for instant answers")
+        st.markdown(
+            "Get immigration rights information directly on WhatsApp — "
+            "the app millions already use every day. Rich formatting, "
+            "bilingual support, and instant responses."
+        )
+    else:
+        st.markdown("### Env\u00edenos un mensaje en WhatsApp para respuestas inmediatas")
+        st.markdown(
+            "Obtenga informaci\u00f3n sobre derechos de inmigraci\u00f3n directamente "
+            "en WhatsApp \u2014 la app que millones ya usan todos los d\u00edas. "
+            "Formato enriquecido, soporte biling\u00fce y respuestas instant\u00e1neas."
+        )
+
+    if wa_display:
+        st.success(
+            f"Message us on WhatsApp: **{wa_display}**"
+            if lang == "en"
+            else f"Escr\u00edbanos en WhatsApp: **{wa_display}**"
+        )
+    else:
+        st.warning(
+            "WhatsApp number not configured yet. Set `TWILIO_WHATSAPP_NUMBER` in `.env`."
+            if lang == "en"
+            else "N\u00famero WhatsApp a\u00fan no configurado. Configure `TWILIO_WHATSAPP_NUMBER` en `.env`."
+        )
+
+    st.divider()
+
+    # ── Example messages ──────────────────────────────────────
+    st.markdown(
+        "#### Try these messages" if lang == "en"
+        else "#### Pruebe estos mensajes"
+    )
+    examples = [
+        ("What if ICE comes to my door?", "\u00bfQu\u00e9 pasa si ICE viene a mi puerta?"),
+        ("ICE", "ICE"),
+        ("POLICE", "POLICIA"),
+        ("HELP", "HELP"),
+        ("ESPA\u00d1OL", "ENGLISH"),
+    ]
+    for en_ex, es_ex in examples:
+        ex = en_ex if lang == "en" else es_ex
+        st.code(ex, language=None)
+
+    st.divider()
+
+    # ── Live stats ────────────────────────────────────────────
+    st.markdown(
+        "#### WhatsApp Stats" if lang == "en"
+        else "#### Estad\u00edsticas WhatsApp"
+    )
+    stats = get_log_stats()
+    col1, col2, col3 = st.columns(3)
+    col1.metric(
+        "Today" if lang == "en" else "Hoy",
+        stats["today"],
+    )
+    col2.metric(
+        "Total" if lang == "en" else "Total",
+        stats["total"],
+    )
+    lang_breakdown = stats.get("languages", {})
+    col3.metric(
+        "Languages" if lang == "en" else "Idiomas",
+        len(lang_breakdown) if lang_breakdown else 0,
+    )
+
+    st.divider()
+
+    # ── Sample conversation ───────────────────────────────────
+    st.markdown(
+        "#### Sample Conversation" if lang == "en"
+        else "#### Conversaci\u00f3n de Ejemplo"
+    )
+
+    sample_en = [
+        ("You", "ICE"),
+        ("Bot",
+         "\U0001f6aa If ICE is at your door:\n\n"
+         "\u2022 DO NOT open the door\n"
+         "\u2022 Ask: \"Do you have a warrant signed by a judge?\"\n"
+         "\u2022 Say: \"I do not consent to your entry\"\n"
+         "\u2022 Stay silent - you have the right\n"
+         "\u2022 Call a lawyer immediately if possible\n\n"
+         "\u26a0\ufe0f Info only, not legal advice."),
+        ("You", "POLICE"),
+        ("Bot",
+         "\U0001f46e If stopped by police:\n\n"
+         "\u2022 Stay calm, be polite\n"
+         "\u2022 You can ask: \"Am I free to go?\"\n"
+         "\u2022 You have the right to remain silent\n"
+         "\u2022 You can refuse searches\n"
+         "\u2022 Don't lie or give fake documents\n"
+         "\u2022 Ask for a lawyer if arrested\n\n"
+         "\u26a0\ufe0f Info only, not legal advice."),
+    ]
+    sample_es = [
+        ("T\u00fa", "ICE"),
+        ("Bot",
+         "\U0001f6aa Si ICE est\u00e1 en su puerta:\n\n"
+         "\u2022 NO abra la puerta\n"
+         "\u2022 Pregunte: \"\u00bfTiene una orden firmada por un juez?\"\n"
+         "\u2022 Diga: \"No doy consentimiento para que entre\"\n"
+         "\u2022 Guarde silencio - tiene el derecho\n"
+         "\u2022 Llame a un abogado si es posible\n\n"
+         "\u26a0\ufe0f Info solamente, no es asesoramiento legal."),
+        ("T\u00fa", "POLICIA"),
+        ("Bot",
+         "\U0001f46e Si la polic\u00eda lo detiene:\n\n"
+         "\u2022 Mant\u00e9ngase calmado, sea cort\u00e9s\n"
+         "\u2022 Puede preguntar: \"\u00bfSoy libre de irme?\"\n"
+         "\u2022 Tiene derecho a guardar silencio\n"
+         "\u2022 Puede negarse a registros\n"
+         "\u2022 No mienta ni use documentos falsos\n"
+         "\u2022 Pida un abogado si lo arrestan\n\n"
+         "\u26a0\ufe0f Info solamente, no es asesoramiento legal."),
+    ]
+    sample = sample_en if lang == "en" else sample_es
+
+    for sender, text in sample:
+        if sender in ("You", "T\u00fa"):
+            with st.chat_message("user"):
+                st.markdown(text)
+        else:
+            with st.chat_message("assistant"):
+                st.markdown(text)
+
+    st.divider()
+
+    # ── Setup instructions ────────────────────────────────────
+    with st.expander(
+        "Developer Setup" if lang == "en"
+        else "Configuraci\u00f3n para Desarrolladores"
+    ):
+        st.markdown(
+            "**To run the WhatsApp bot locally:**\n\n"
+            "```bash\n"
+            "# 1. Install dependencies\n"
+            "pip install twilio flask\n\n"
+            "# 2. Set environment variables in .env\n"
+            "TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxx\n"
+            "TWILIO_AUTH_TOKEN=your_auth_token\n"
+            "TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886\n\n"
+            "# 3. Start the Flask server\n"
+            "python src/whatsapp_bot.py\n\n"
+            "# 4. Expose with ngrok (for Twilio webhook)\n"
+            "ngrok http 5001\n\n"
+            "# 5. In Twilio Console, set WhatsApp sandbox webhook to:\n"
+            "# https://your-ngrok-url.ngrok.io/whatsapp\n"
+            "```\n\n"
+            "**Test without Twilio:**\n\n"
+            "```bash\n"
+            "curl -X POST http://localhost:5001/test \\\n"
+            '  -H "Content-Type: application/json" \\\n'
+            '  -d \'{"phone": "whatsapp:+1TEST", '
+            '"message": "What if ICE comes to my door?"}\'\n'
+            "```"
+        )
