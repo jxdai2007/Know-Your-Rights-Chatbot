@@ -14,6 +14,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import Flask, request, jsonify
+from twilio.rest import Client as TwilioClient
 from twilio.twiml.messaging_response import MessagingResponse
 
 try:
@@ -35,6 +36,10 @@ LOG_FILE = BASE_DIR / "data" / "whatsapp_log.json"
 # ── Logging ───────────────────────────────────────────────────────
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [WA] %(message)s")
 logger = logging.getLogger(__name__)
+
+# Suppress verbose Twilio / urllib3 / httpx debug logs.
+for _noisy in ("twilio", "twilio.http_client", "urllib3", "httpx", "httpcore"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 # ── Flask app ─────────────────────────────────────────────────────
 app = Flask(__name__)
@@ -416,6 +421,17 @@ def _process_text(
     return reply
 
 
+# ── Twilio REST client (singleton) ────────────────────────────────
+_twilio_client: TwilioClient | None = None
+
+
+def _get_twilio_client() -> TwilioClient:
+    global _twilio_client
+    if _twilio_client is None:
+        _twilio_client = TwilioClient(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
+    return _twilio_client
+
+
 # ── Twilio WhatsApp webhook ───────────────────────────────────────
 @app.route("/whatsapp", methods=["POST"])
 def whatsapp_webhook():
@@ -428,9 +444,20 @@ def whatsapp_webhook():
 
     reply_text = handle_message(phone, body, num_media=num_media)
 
-    resp = MessagingResponse()
-    resp.message(reply_text)
-    return str(resp), 200, {"Content-Type": "application/xml"}
+    # Send via REST API for better error visibility.
+    try:
+        client = _get_twilio_client()
+        msg = client.messages.create(
+            from_=TWILIO_WHATSAPP_NUMBER,
+            to=phone,
+            body=reply_text,
+        )
+        logger.info("Sent SID=%s status=%s", msg.sid, msg.status)
+    except Exception as exc:
+        logger.error("Twilio send failed: %s", exc)
+
+    # Return empty TwiML to acknowledge the webhook.
+    return str(MessagingResponse()), 200, {"Content-Type": "application/xml"}
 
 
 # ── Test endpoint (no Twilio needed) ─────────────────────────────

@@ -44,24 +44,25 @@
     "welcomed": true
   },
   "whatsapp:+17323310151": {
-    "language": "es",
+    "language": "en",
     "history": [
       {
-        "q": "Ice",
-        "a": "\u2022 No abra la puerta.\n\u2022 Pregunte si tienen una orden judicial firmada por un juez.\n\u2022 Si entran, diga: \"No consiento a su entrada o su registro de este lugar. Estoy ejerciendo mi derecho de guardar sile"
+        "q": "Hi",
+        "a": "Hi! I'm the Know Your Rights bot. I provide immigration rights info from ACLU sources. Ask me about ICE encounters, police stops, protest rights, or voting rights. Type HELP for all options.\n"
       },
       {
-        "q": "Police",
-        "a": "*   Guarde la calma y sea amable. No interfiera con la polic\u00eda. [1, 3]\n*   Pregunte si es libre para irse. Si dicen que s\u00ed, v\u00e1yase con calma. [2, 3]\n*   Tiene derecho a permanecer en silencio. [1, 2]\n"
+        "q": "An ice agent just hit me at a protest",
+        "a": "\u2022 Busque atenci\u00f3n m\u00e9dica de inmediato y tome fotos de sus lesiones.\n\u2022 Obtenga informaci\u00f3n de contacto de testigos. Tome nota de todo lo que recuerde, incluyendo las placas de los oficiales. (Fuente 1,"
       },
       {
-        "q": "Ice",
-        "a": "\u2022 No abra la puerta.\n\u2022 Pregunte si tienen una orden judicial firmada por un juez.\n\u2022 Si entran, diga: \"No consiento a su entrada o su registro de este lugar. Estoy ejerciendo mi derecho de guardar sile"
+        "q": "An ice agent just hit me at a protest. What should I do",
+        "a": "\u2022 Get medical help for your injury right away. Take photos of your injuries.\n\u2022 Write down everything you remember about the incident.\n\u2022 Get contact info for witnesses. File a complaint with the agency"
       }
     ],
     "last_full_answer": "\ud83d\udc6e If you are stopped by the police, it's a stressful experience that can escalate quickly. Here's what you should know:\n\n*   **Right to Remain Silent:** You have the right to remain silent (According to ACLU).\n*   **If you are a passenger:** You can ask if you\u2019re free to leave. If yes, you may silently leave (According to ACLU).\n*   **If you are arrested or detained:** Say you wish to remain silent and ask for a lawyer immediately. Don't give any explanations or excuses. Don't say anything, sign anything, or make any decisions without a lawyer (According to ACLU).\n*   **Phone call:** If arrested, you have the right to make a local phone call. The police cannot listen if you call a lawyer (According to ACLU).\n*   **Answering questions:** You do not have to answer questions about where you were born, whether you are a U.S. citizen, or how you entered the country (According to ACLU).\n*   **Search:** You never have to consent to a search of yourself or your belongings (According to ACLU).\n\nHow to reduce risk to yourself:\n\n*   Stay calm. Don\u2019t run, resist, or obstruct the officers (According to ACLU).\n*   Keep your hands where the police can see them (According to ACLU).\n*   Stop the car in a safe place as quickly as possible. Turn off the car, turn on the internal light, open the window part way, and place your hands on the wheel. If you\u2019re in the passenger seat, put your hands on the dashboard (According to ACLU).\n*   Avoid making sudden movements (According to ACLU).\n\nIt's important to note that the burden of de-escalation does not fall on you, but on the police officers (According to ACLU).\n\nFor personalized legal advice, please consult with a qualified immigration attorney.\n\n\n\ud83d\udcda *Sources:*\n\u2022 \ud83d\udc6e _Stopped by Police_\n\u2022 \u270a _Protesters\u2019 Rights_\n\u2022 \ud83d\uddf3\ufe0f _Federal Agents at the Polls_\n\n\u26a0\ufe0f _Not legal advice. Consult an immigration attorney._",
     "message_times": [
-      1770541708.519743
+      1770546760.325632,
+      1770546781.585858
     ],
     "welcomed": true
   },
@@ -112,5 +113,33 @@
       1770537125.948736
     ],
     "welcomed": true
+  },
+  "test_debug": {
+    "language": "en",
+    "history": [
+      {
+        "q": "What if ICE comes to my door?",
+        "a": "*   Keep the door closed.\n*   Ask for a warrant signed by a judge. Inspect it carefully through the window.\n*   Say \"I do not consent to entry.\"\n*   Say you wish to remain silent and want a lawyer.\n* "
+      }
+    ],
+    "message_times": [
+      1770545437.540797
+    ],
+    "welcomed": true,
+    "awaiting_language": false
+  },
+  "whatsapp:+1TEST999": {
+    "language": "en",
+    "history": [],
+    "message_times": [],
+    "welcomed": true,
+    "awaiting_language": true
+  },
+  "whatsapp:+10000000000": {
+    "language": "en",
+    "history": [],
+    "message_times": [],
+    "welcomed": true,
+    "awaiting_language": true
   }
 }

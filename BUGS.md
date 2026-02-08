@@ -1,2 +1,0 @@
-For the demo make sure the user is put on cooldown from sending new messages until the previous message is done processing and a response is sent back.
-Check that the changes to the bots frontend didn't impact the whatsapp integration

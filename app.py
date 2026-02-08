@@ -461,8 +461,8 @@ with chat_col:
             if msg["role"] == "assistant" and msg.get("sources"):
                 _render_sources(msg["sources"], lang)
 
-    # Chat input.
-    user_input = st.chat_input(PLACEHOLDER[lang])
+    # Chat input (disabled while processing).
+    user_input = st.chat_input(PLACEHOLDER[lang], disabled=st.session_state.processing)
     question = clicked_question or user_input
 
     if question:
