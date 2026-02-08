@@ -11,9 +11,6 @@ __pycache__/
 dist/
 build/
 
-# ChromaDB local storage
-chroma_db/
-
 # IDE
 .vscode/
 .idea/
@@ -27,8 +24,13 @@ Thumbs.db
 # Data (keep structure, ignore large files)
 data/raw/*.pdf
 data/raw/*.html
-data/processed/*.json
 data/pdfs/**/*.pdf
+
+# Runtime data (session state and logs)
+data/whatsapp_sessions.json
+data/whatsapp_log.json
+data/sms_sessions.json
+data/sms_log.json
 
 # Streamlit
 .streamlit/secrets.toml

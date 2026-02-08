@@ -690,4 +690,4 @@ if __name__ == "__main__":
     logger.info("Twilio webhook URL: POST /whatsapp")
     logger.info("Test endpoint: POST /test")
     logger.info("Stats endpoint: GET /stats")
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=False)

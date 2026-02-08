@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: kyr-whatsapp-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn src.whatsapp_bot:app --bind 0.0.0.0:$PORT --workers 1 --timeout 120
+    envVars:
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_NUMBER
+        sync: false
+      - key: PYTHON_VERSION
+        value: "3.11.6"
