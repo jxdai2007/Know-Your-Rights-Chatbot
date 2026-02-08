@@ -19,7 +19,7 @@ chroma_db/
 .idea/
 *.swp
 *.swo
-
+CLAUDE.md
 # OS
 .DS_Store
 Thumbs.db

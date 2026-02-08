@@ -84,18 +84,28 @@ Liberties Union (ACLU).
 
 CRITICAL RULES:
 1. Answer ONLY using the provided context below.
-2. If the question is NOT about immigration rights, police encounters, \
-protests, or voting rights — OR the context does not contain a relevant \
-answer — respond EXACTLY with: "I don't have verified information about \
-that specific question. For personalized legal advice, please consult \
-with a qualified immigration attorney." Do NOT cite any sources in this case.
-3. When you DO have a relevant answer, cite your sources by mentioning \
+2. If the message is a greeting or introductory message (like "hi", \
+"hello", "hey", "hola", etc.), respond with a friendly greeting and \
+briefly explain that you are an immigration rights assistant that can \
+help with ICE encounters, police stops, protest rights, and voting rights \
+based on ACLU sources. Do NOT cite any sources in this case.
+3. If the question is NOT about immigration rights, police encounters, \
+protests, or voting rights, respond EXACTLY with: "This isn't something \
+I'm designed to help with. I only provide immigration rights information \
+based on ACLU sources. For other questions, try a general-purpose AI \
+assistant." Do NOT cite any sources in this case.
+4. If the question IS about immigration rights but the provided context \
+does not contain a relevant answer, respond EXACTLY with: "I don't have \
+verified information about that specific question. For personalized legal \
+advice, please consult with a qualified immigration attorney." Do NOT \
+cite any sources in this case.
+5. When you DO have a relevant answer, cite your sources by mentioning \
 "According to ACLU..." or referencing the source title.
-4. NEVER provide legal advice — you provide information only.
-5. Encourage users to consult with immigration attorneys for their \
+6. NEVER provide legal advice — you provide information only.
+7. Encourage users to consult with immigration attorneys for their \
 specific situation.
-6. Be empathetic, clear, and supportive in tone.
-7. If responding in Spanish, maintain the same guidelines."""
+8. Be empathetic, clear, and supportive in tone.
+9. If responding in Spanish, maintain the same guidelines."""
 
 USER_PROMPT_TEMPLATE = """\
 VERIFIED CONTEXT:
@@ -114,6 +124,17 @@ NO_CONTEXT_REPLY_ES = (
     "No tengo informacion verificada sobre esa pregunta especifica. "
     "Para obtener asesoramiento legal personalizado, consulte con un "
     "abogado de inmigracion calificado."
+)
+
+OFF_TOPIC_REPLY_EN = (
+    "This isn't something I'm designed to help with. I only provide "
+    "immigration rights information based on ACLU sources. For other "
+    "questions, try a general-purpose AI assistant."
+)
+OFF_TOPIC_REPLY_ES = (
+    "Esto no es algo para lo que estoy diseñado. Solo proporciono "
+    "información sobre derechos de inmigración basada en fuentes de la ACLU. "
+    "Para otras preguntas, pruebe un asistente de IA de propósito general."
 )
 
 
@@ -185,8 +206,8 @@ def answer_question(
     results = [r for r in results if r["distance"] <= MAX_DISTANCE]
 
     if not results:
-        no_ctx = NO_CONTEXT_REPLY_ES if language == "es" else NO_CONTEXT_REPLY_EN
-        return no_ctx, []
+        off = OFF_TOPIC_REPLY_ES if language == "es" else OFF_TOPIC_REPLY_EN
+        return off, []
 
     # ── 3. Build prompt ───────────────────────────────────────────
     context = _build_context(results)

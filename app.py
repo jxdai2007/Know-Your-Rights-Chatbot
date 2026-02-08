@@ -63,11 +63,13 @@ PLACEHOLDER = {
 
 # ── Helpers ───────────────────────────────────────────────────────
 def _is_fallback_answer(text: str) -> bool:
-    """True if the answer is the 'no verified info' fallback."""
+    """True if the answer is a fallback (off-topic or no-info)."""
     low = text.lower()
     return (
         "don't have verified information" in low
         or "no tengo informacion verificada" in low
+        or "isn't something i'm designed to help with" in low
+        or "no es algo para lo que estoy" in low
     )
 
 

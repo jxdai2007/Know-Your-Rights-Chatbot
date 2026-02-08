@@ -54,11 +54,21 @@ RULES:
 4. Use simple, clear language — no jargon.
 5. No citations, no source names, no "According to..." phrases.
 6. Focus on WHAT TO DO RIGHT NOW.
-7. If the question is NOT about immigration rights, police encounters, \
+7. If the message is a greeting or introductory message (like "hi", \
+"hello", "hey", "hola", etc.), respond EXACTLY with: \
+"Hi! I'm the Know Your Rights bot. I provide immigration rights info \
+from ACLU sources. Ask me about ICE encounters, police stops, protest \
+rights, or voting rights. Type HELP for all options."
+8. If the question is NOT about immigration rights, police encounters, \
 protests, or voting rights, respond EXACTLY with: \
-"I don't have verified information about that. Text HELP for options."
-8. If responding in Spanish, follow the same rules in Spanish.
-9. NEVER provide legal advice — you provide information only."""
+"This isn't something I'm designed to help with. I only cover immigration \
+rights. Try a general AI assistant like ChatGPT."
+9. If the question IS about immigration rights but the context doesn't \
+answer it, respond EXACTLY with: \
+"I don't have info on that specific topic in my sources. For legal advice, \
+consult an immigration attorney."
+10. If responding in Spanish, follow the same rules in Spanish.
+11. NEVER provide legal advice — you provide information only."""
 
 # Max tokens kept small to enforce concise answers.
 URGENT_MAX_TOKENS = 256
@@ -104,26 +114,37 @@ QUICK_TOPICS = {
     },
 }
 
-WELCOME_TEXT = {
+LANGUAGE_SELECT_MSG = (
+    "Welcome to Know Your Rights / Bienvenido a Conozca Sus Derechos\n\n"
+    "Please choose your language / Elija su idioma:\n\n"
+    "1 - English\n"
+    "2 - Español"
+)
+
+CAPABILITIES_MSG = {
     "en": (
-        "\U0001f44b Know Your Rights\n\n"
-        "Ask any immigration rights question.\n\n"
-        "Quick:\n"
-        "ICE - ICE encounter rights\n"
-        "POLICE - police stop rights\n"
-        "RIGHTS - basic rights\n"
-        "ESPA\u00d1OL - switch to Spanish\n"
-        "HELP - all options"
+        "Know Your Rights Bot\n\n"
+        "I provide immigration rights information from ACLU sources. "
+        "I can help with:\n\n"
+        "- Your rights if ICE comes to your door\n"
+        "- Your rights when stopped by police\n"
+        "- Your rights at protests\n"
+        "- Voting rights information\n\n"
+        "Quick topics: ICE, POLICE, RIGHTS\n"
+        "Commands: ESPAÑOL, HELP\n\n"
+        "What would you like to know?"
     ),
     "es": (
-        "\U0001f44b Conozca Sus Derechos\n\n"
-        "Haga cualquier pregunta sobre derechos de inmigraci\u00f3n.\n\n"
-        "R\u00e1pido:\n"
-        "ICE - derechos ante ICE\n"
-        "POLICIA - derechos ante polic\u00eda\n"
-        "DERECHOS - derechos b\u00e1sicos\n"
-        "ENGLISH - cambiar a ingl\u00e9s\n"
-        "HELP - todas las opciones"
+        "Bot Conozca Sus Derechos\n\n"
+        "Proporciono información sobre derechos de inmigración de fuentes "
+        "de la ACLU. Puedo ayudar con:\n\n"
+        "- Sus derechos si ICE viene a su puerta\n"
+        "- Sus derechos al ser detenido por la policía\n"
+        "- Sus derechos en protestas\n"
+        "- Información sobre derechos de voto\n\n"
+        "Temas rápidos: ICE, POLICIA, DERECHOS\n"
+        "Comandos: ENGLISH, HELP\n\n"
+        "¿Qué le gustaría saber?"
     ),
 }
 
@@ -191,6 +212,7 @@ def _get_session(phone: str) -> dict:
             "history": [],
             "message_times": [],
             "welcomed": False,
+            "awaiting_language": True,
         }
         _save_sessions(sessions)
     return sessions[phone]
@@ -289,19 +311,35 @@ def handle_message(phone: str, body: str, num_media: int = 0) -> str:
     session = _get_session(phone)
     text = body.strip()
     text_upper = text.upper()
-    lang = session["language"]
 
-    # ── Welcome message for first-time users ──────────────────
-    if not session.get("welcomed"):
-        session["welcomed"] = True
+    # ── Language selection for new users ──────────────────────
+    if session.get("awaiting_language"):
+        choice = text_upper.strip()
+        if choice in ("1", "ENGLISH", "EN"):
+            session["language"] = "en"
+        elif choice in ("2", "ESPAÑOL", "ESPANOL", "ES", "SPANISH"):
+            session["language"] = "es"
+        else:
+            # First contact — send the language prompt
+            if not session.get("welcomed"):
+                session["welcomed"] = True
+                _update_session(phone, session)
+                _log_interaction(phone, "(first contact)", LANGUAGE_SELECT_MSG, "en")
+                return LANGUAGE_SELECT_MSG
+            # Already sent prompt but got unrecognized reply — resend
+            _update_session(phone, session)
+            return LANGUAGE_SELECT_MSG
+
+        # Language selected — send capabilities summary
+        session["awaiting_language"] = False
+        lang = session["language"]
         _update_session(phone, session)
-        welcome = WELCOME_TEXT[lang]
-        _log_interaction(phone, "(first contact)", welcome, lang)
-        if text:
-            reply = _process_text(phone, session, text, text_upper, lang, num_media)
-            return welcome + "\n\n---\n\n" + reply
-        return welcome
+        reply = CAPABILITIES_MSG[lang]
+        _log_interaction(phone, text, reply, lang)
+        return reply
 
+    # ── Normal processing (already onboarded) ─────────────────
+    lang = session["language"]
     return _process_text(phone, session, text, text_upper, lang, num_media)
 
 
