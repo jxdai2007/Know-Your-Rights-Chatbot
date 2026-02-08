@@ -226,6 +226,9 @@ def answer_question(
             system_instruction=system_prompt or SYSTEM_PROMPT,
             temperature=0.3,
             max_output_tokens=max_output_tokens,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                max_remote_calls=None,
+            ),
         ),
     )
 

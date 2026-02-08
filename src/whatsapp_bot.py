@@ -73,14 +73,6 @@ consult an immigration attorney."
 # Max tokens kept small to enforce concise answers.
 URGENT_MAX_TOKENS = 256
 
-# ── Spanish detection keywords ────────────────────────────────────
-SPANISH_KEYWORDS = {
-    "que", "como", "cuando", "donde", "porque", "puedo", "tengo",
-    "necesito", "derechos", "policia", "inmigracion", "ayuda",
-    "hola", "por favor", "gracias", "si", "mis", "son", "los",
-    "las", "una", "con", "para", "estoy", "soy", "hacer",
-}
-
 # ── Topic emoji (one per message, based on question keywords) ────
 TOPIC_EMOJI = {
     "ice": "\U0001f6aa",
@@ -100,20 +92,6 @@ TOPIC_EMOJI = {
     "derechos": "\u2696\ufe0f",
 }
 
-# ── Quick-topic mappings ─────────────────────────────────────────
-QUICK_TOPICS = {
-    "en": {
-        "ICE": "What are my rights if ICE comes to my door?",
-        "POLICE": "What are my rights when stopped by police?",
-        "RIGHTS": "What are my basic immigration rights?",
-    },
-    "es": {
-        "ICE": "\u00bfCu\u00e1les son mis derechos si ICE viene a mi puerta?",
-        "POLICIA": "\u00bfCu\u00e1les son mis derechos cuando me detiene la polic\u00eda?",
-        "DERECHOS": "\u00bfCu\u00e1les son mis derechos b\u00e1sicos de inmigraci\u00f3n?",
-    },
-}
-
 LANGUAGE_SELECT_MSG = (
     "Welcome to Know Your Rights / Bienvenido a Conozca Sus Derechos\n\n"
     "Please choose your language / Elija su idioma:\n\n"
@@ -130,7 +108,9 @@ CAPABILITIES_MSG = {
         "- Your rights when stopped by police\n"
         "- Your rights at protests\n"
         "- Voting rights information\n\n"
-        "Quick topics: ICE, POLICE, RIGHTS\n"
+        "Try asking:\n"
+        "- \"What if ICE comes to my door?\"\n"
+        "- \"What are my rights with police?\"\n\n"
         "Commands: ESPAÑOL, HELP\n\n"
         "What would you like to know?"
     ),
@@ -142,7 +122,9 @@ CAPABILITIES_MSG = {
         "- Sus derechos al ser detenido por la policía\n"
         "- Sus derechos en protestas\n"
         "- Información sobre derechos de voto\n\n"
-        "Temas rápidos: ICE, POLICIA, DERECHOS\n"
+        "Pruebe preguntar:\n"
+        "- \"¿Qué pasa si ICE viene a mi puerta?\"\n"
+        "- \"¿Cuáles son mis derechos con la policía?\"\n\n"
         "Comandos: ENGLISH, HELP\n\n"
         "¿Qué le gustaría saber?"
     ),
@@ -152,10 +134,10 @@ HELP_TEXT = {
     "en": (
         "Know Your Rights\n\n"
         "Ask any question about immigration rights.\n\n"
-        "Quick topics:\n"
-        "ICE - ICE encounter rights\n"
-        "POLICE - police stop rights\n"
-        "RIGHTS - basic rights\n\n"
+        "Try asking about:\n"
+        "- ICE encounters and your rights\n"
+        "- Police stops and your rights\n"
+        "- Your basic immigration rights\n\n"
         "Commands:\n"
         "ESPA\u00d1OL - switch to Spanish\n"
         "ENGLISH - switch to English\n"
@@ -165,10 +147,10 @@ HELP_TEXT = {
     "es": (
         "Conozca Sus Derechos\n\n"
         "Haga cualquier pregunta sobre derechos de inmigraci\u00f3n.\n\n"
-        "Temas r\u00e1pidos:\n"
-        "ICE - derechos ante ICE\n"
-        "POLICIA - derechos ante polic\u00eda\n"
-        "DERECHOS - derechos b\u00e1sicos\n\n"
+        "Pruebe preguntar sobre:\n"
+        "- Encuentros con ICE y sus derechos\n"
+        "- Paradas policiales y sus derechos\n"
+        "- Sus derechos b\u00e1sicos de inmigraci\u00f3n\n\n"
         "Comandos:\n"
         "ENGLISH - cambiar a ingl\u00e9s\n"
         "ESPA\u00d1OL - cambiar a espa\u00f1ol\n"
@@ -263,16 +245,6 @@ def get_log_stats() -> dict:
         lang_counts[lang] = lang_counts.get(lang, 0) + 1
 
     return {"total": len(entries), "today": today_count, "languages": lang_counts}
-
-
-# ── Language detection ────────────────────────────────────────────
-def detect_language(text: str) -> str:
-    """Simple keyword-based language detection."""
-    words = set(text.lower().split())
-    spanish_count = len(words & SPANISH_KEYWORDS)
-    if spanish_count >= 2:
-        return "es"
-    return "en"
 
 
 # ── Rate limiting ─────────────────────────────────────────────────
@@ -392,11 +364,6 @@ def _process_text(
         _log_interaction(phone, text, reply, "en")
         return reply
 
-    # ── Quick topics ──────────────────────────────────────────
-    topics = QUICK_TOPICS.get(lang, QUICK_TOPICS["en"])
-    if text_upper in topics:
-        text = topics[text_upper]
-
     # ── Empty message ─────────────────────────────────────────
     if not text:
         reply = (
@@ -407,12 +374,6 @@ def _process_text(
         _update_session(phone, session)
         _log_interaction(phone, "", reply, lang)
         return reply
-
-    # ── Auto-detect language ──────────────────────────────────
-    detected = detect_language(text)
-    if detected == "es" and lang == "en":
-        lang = "es"
-        session["language"] = "es"
 
     # ── RAG query with urgent prompt ──────────────────────────
     try:

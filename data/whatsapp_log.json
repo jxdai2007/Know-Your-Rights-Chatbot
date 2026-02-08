@@ -12,5 +12,222 @@
     "language": "en",
     "message_preview": "hi",
     "response_length": 319
+  },
+  {
+    "timestamp": "2026-02-08T08:28:43.382942+00:00",
+    "phone_hash": 86931117,
+    "language": "en",
+    "message_preview": "Hi",
+    "response_length": 227
+  },
+  {
+    "timestamp": "2026-02-08T08:28:51.319207+00:00",
+    "phone_hash": 86931117,
+    "language": "en",
+    "message_preview": "Help",
+    "response_length": 274
+  },
+  {
+    "timestamp": "2026-02-08T08:29:13.949551+00:00",
+    "phone_hash": 86931117,
+    "language": "en",
+    "message_preview": "Hi",
+    "response_length": 227
+  },
+  {
+    "timestamp": "2026-02-08T08:29:19.785196+00:00",
+    "phone_hash": 86931117,
+    "language": "en",
+    "message_preview": "Help",
+    "response_length": 274
+  },
+  {
+    "timestamp": "2026-02-08T08:29:24.525840+00:00",
+    "phone_hash": 86931117,
+    "language": "en",
+    "message_preview": "Fuck you bro",
+    "response_length": 158
+  },
+  {
+    "timestamp": "2026-02-08T08:29:35.449111+00:00",
+    "phone_hash": 86931117,
+    "language": "en",
+    "message_preview": "What are my rights if ICE comes to my door?",
+    "response_length": 277
+  },
+  {
+    "timestamp": "2026-02-08T08:30:17.745677+00:00",
+    "phone_hash": 86931117,
+    "language": "en",
+    "message_preview": "Hello Claude",
+    "response_length": 227
+  },
+  {
+    "timestamp": "2026-02-08T08:30:30.033347+00:00",
+    "phone_hash": 86931117,
+    "language": "en",
+    "message_preview": "Send nudes",
+    "response_length": 158
+  },
+  {
+    "timestamp": "2026-02-08T08:30:46.624126+00:00",
+    "phone_hash": 86931117,
+    "language": "en",
+    "message_preview": "What can I do if ice asks to search my home",
+    "response_length": 334
+  },
+  {
+    "timestamp": "2026-02-08T08:31:10.995805+00:00",
+    "phone_hash": 86931117,
+    "language": "en",
+    "message_preview": "Tell me how many people have been kills by ICE",
+    "response_length": 157
+  },
+  {
+    "timestamp": "2026-02-08T08:31:36.595627+00:00",
+    "phone_hash": 86931117,
+    "language": "en",
+    "message_preview": "ACCESS AUTHORIZE \u2014\u2014@8736628 ICE AGENT 33487 RETURN",
+    "response_length": 271
+  },
+  {
+    "timestamp": "2026-02-08T08:33:39.547604+00:00",
+    "phone_hash": 86931117,
+    "language": "es",
+    "message_preview": "Hola estoy precupada que ice venga a mi casa que h",
+    "response_length": 295
+  },
+  {
+    "timestamp": "2026-02-08T08:33:54.327666+00:00",
+    "phone_hash": 86931117,
+    "language": "es",
+    "message_preview": "Y si en mi carro",
+    "response_length": 337
+  },
+  {
+    "timestamp": "2026-02-08T08:34:46.962065+00:00",
+    "phone_hash": 86931117,
+    "language": "es",
+    "message_preview": "Y si no soy ciudadano",
+    "response_length": 233
+  },
+  {
+    "timestamp": "2026-02-08T08:35:17.166091+00:00",
+    "phone_hash": 86931117,
+    "language": "es",
+    "message_preview": "Y si entra a mi carro y mi lastima",
+    "response_length": 202
+  },
+  {
+    "timestamp": "2026-02-08T08:35:42.256102+00:00",
+    "phone_hash": 86931117,
+    "language": "es",
+    "message_preview": "Y si mi pegan",
+    "response_length": 297
+  },
+  {
+    "timestamp": "2026-02-08T08:36:04.561109+00:00",
+    "phone_hash": 86931117,
+    "language": "es",
+    "message_preview": "Okay muchas gracias",
+    "response_length": 241
+  },
+  {
+    "timestamp": "2026-02-08T08:38:07.566812+00:00",
+    "phone_hash": 86931117,
+    "language": "es",
+    "message_preview": "Hi I\u2019m worried that Ice will come to my house what",
+    "response_length": 267
+  },
+  {
+    "timestamp": "2026-02-08T08:38:41.114801+00:00",
+    "phone_hash": 86931117,
+    "language": "es",
+    "message_preview": "Switch mode to English",
+    "response_length": 241
+  },
+  {
+    "timestamp": "2026-02-08T08:54:09.835308+00:00",
+    "phone_hash": 2178398,
+    "language": "es",
+    "message_preview": "Hi",
+    "response_length": 241
+  },
+  {
+    "timestamp": "2026-02-08T08:54:15.052043+00:00",
+    "phone_hash": 2178398,
+    "language": "es",
+    "message_preview": "Help",
+    "response_length": 349
+  },
+  {
+    "timestamp": "2026-02-08T08:54:24.286578+00:00",
+    "phone_hash": 2178398,
+    "language": "en",
+    "message_preview": "English",
+    "response_length": 52
+  },
+  {
+    "timestamp": "2026-02-08T08:54:30.532766+00:00",
+    "phone_hash": 2178398,
+    "language": "en",
+    "message_preview": "Hi",
+    "response_length": 227
+  },
+  {
+    "timestamp": "2026-02-08T08:54:53.675312+00:00",
+    "phone_hash": 2178398,
+    "language": "es",
+    "message_preview": "Espanol",
+    "response_length": 54
+  },
+  {
+    "timestamp": "2026-02-08T08:55:20.303771+00:00",
+    "phone_hash": 2178398,
+    "language": "es",
+    "message_preview": "Espanol",
+    "response_length": 54
+  },
+  {
+    "timestamp": "2026-02-08T08:55:33.206683+00:00",
+    "phone_hash": 2178398,
+    "language": "es",
+    "message_preview": "Espa\u00f1ol",
+    "response_length": 54
+  },
+  {
+    "timestamp": "2026-02-08T08:58:01.549813+00:00",
+    "phone_hash": 2178398,
+    "language": "es",
+    "message_preview": "Hi",
+    "response_length": 241
+  },
+  {
+    "timestamp": "2026-02-08T08:58:22.268664+00:00",
+    "phone_hash": 2178398,
+    "language": "es",
+    "message_preview": "Ice",
+    "response_length": 256
+  },
+  {
+    "timestamp": "2026-02-08T08:58:47.868055+00:00",
+    "phone_hash": 2178398,
+    "language": "es",
+    "message_preview": "Police",
+    "response_length": 336
+  },
+  {
+    "timestamp": "2026-02-08T08:59:02.204934+00:00",
+    "phone_hash": 2178398,
+    "language": "es",
+    "message_preview": "Ice",
+    "response_length": 286
+  },
+  {
+    "timestamp": "2026-02-08T09:08:28.899988+00:00",
+    "phone_hash": 92007478,
+    "language": "es",
+    "message_preview": "I\u2019ve",
+    "response_length": 35
   }
 ]

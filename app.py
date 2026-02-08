@@ -25,6 +25,36 @@ if "language" not in st.session_state:
     st.session_state.language = "en"
 if "processing" not in st.session_state:
     st.session_state.processing = False
+if "dark_mode" not in st.session_state:
+    st.session_state.dark_mode = False
+
+# ── Dark theme CSS ────────────────────────────────────────────────
+DARK_THEME_CSS = """
+<style>
+    .stApp { background-color: #0e1117; color: #fafafa; }
+    .stChatMessage { background-color: #1a1d24; }
+    .stMarkdown, .stMarkdown p, .stMarkdown li { color: #fafafa; }
+    header[data-testid="stHeader"] { background-color: #0e1117; }
+    .stSidebar, section[data-testid="stSidebar"] { background-color: #161b22; }
+    .stSidebar .stMarkdown, .stSidebar .stMarkdown p { color: #e6edf3; }
+    div[data-testid="stExpander"] { background-color: #161b22; border-color: #30363d; }
+    .stTabs [data-baseweb="tab-list"] { background-color: #0e1117; }
+    .stTabs [data-baseweb="tab"] { color: #fafafa; }
+    .stDivider { border-color: #30363d; }
+    .stChatInput input, .stChatInput textarea { background-color: #1a1d24; color: #fafafa; }
+</style>
+"""
+
+LIGHT_THEME_CSS = """
+<style>
+    .stApp { background-color: #ffffff; color: #262730; }
+</style>
+"""
+
+if st.session_state.dark_mode:
+    st.markdown(DARK_THEME_CSS, unsafe_allow_html=True)
+else:
+    st.markdown(LIGHT_THEME_CSS, unsafe_allow_html=True)
 
 # ── Quick-action definitions per language ─────────────────────────
 QUICK_ACTIONS = {
@@ -62,15 +92,27 @@ PLACEHOLDER = {
 
 
 # ── Helpers ───────────────────────────────────────────────────────
-def _is_fallback_answer(text: str) -> bool:
-    """True if the answer is a fallback (off-topic or no-info)."""
-    low = text.lower()
-    return (
-        "don't have verified information" in low
-        or "no tengo informacion verificada" in low
-        or "isn't something i'm designed to help with" in low
-        or "no es algo para lo que estoy" in low
+def _should_suppress_sources(answer: str, sources: list[dict]) -> bool:
+    """True if sources should be hidden (fallback, greeting, or no citations)."""
+    low = answer.lower()
+    # Explicit fallback phrases (off-topic or no-info responses).
+    if any(p in low for p in [
+        "don't have verified information",
+        "no tengo informacion verificada",
+        "isn't something i'm designed to help with",
+        "no es algo para lo que estoy",
+    ]):
+        return True
+    if not sources:
+        return True
+    # If the answer doesn't reference any source material, suppress sources.
+    # The system prompt instructs: cite with "According to ACLU" or source title.
+    mentions_aclu = "aclu" in low
+    mentions_title = any(
+        s["title"].lower() in low
+        for s in sources if len(s.get("title", "")) > 3
     )
+    return not mentions_aclu and not mentions_title
 
 
 def _render_sources(sources: list[dict], lang: str) -> None:
@@ -167,7 +209,16 @@ with st.sidebar:
 # ── Header ────────────────────────────────────────────────────────
 lang = st.session_state.language
 
-st.markdown("# \U0001f6e1\ufe0f Know Your Rights" if lang == "en" else "# \U0001f6e1\ufe0f Conozca Sus Derechos")
+header_col, theme_col = st.columns([5, 1])
+with header_col:
+    st.markdown("# \U0001f6e1\ufe0f Know Your Rights" if lang == "en" else "# \U0001f6e1\ufe0f Conozca Sus Derechos")
+with theme_col:
+    st.markdown("")  # spacing
+    theme_label = "Dark" if not st.session_state.dark_mode else "Light"
+    if st.button(f"{theme_label}", key="theme_toggle", use_container_width=True):
+        st.session_state.dark_mode = not st.session_state.dark_mode
+        st.rerun()
+
 st.markdown(
     "*Immigration Rights Information Assistant*" if lang == "en"
     else "*Asistente de Informaci\u00f3n sobre Derechos de Inmigraci\u00f3n*"
@@ -252,7 +303,7 @@ with tab_chat:
                     elapsed = 0.0
 
             # Bug fix: suppress sources when the LLM declined to answer.
-            if _is_fallback_answer(answer):
+            if _should_suppress_sources(answer, sources):
                 sources = []
 
             st.markdown(answer)
@@ -277,9 +328,9 @@ with tab_chat:
 
 # ── Tab 2: WhatsApp Access ───────────────────────────────────────
 with tab_wa:
-    wa_number = os.getenv("TWILIO_WHATSAPP_NUMBER", "")
+    wa_number = os.getenv("TWILIO_WHATSAPP_NUMBER", "whatsapp:+14155238886")
     # Strip the "whatsapp:" prefix for display.
-    wa_display = wa_number.replace("whatsapp:", "") if wa_number else ""
+    wa_display = wa_number.replace("whatsapp:", "")
 
     if lang == "en":
         st.markdown("### Message us on WhatsApp for instant answers")
@@ -296,18 +347,11 @@ with tab_wa:
             "Formato enriquecido, soporte biling\u00fce y respuestas instant\u00e1neas."
         )
 
-    if wa_display:
-        st.success(
-            f"Message us on WhatsApp: **{wa_display}**"
-            if lang == "en"
-            else f"Escr\u00edbanos en WhatsApp: **{wa_display}**"
-        )
-    else:
-        st.warning(
-            "WhatsApp number not configured yet. Set `TWILIO_WHATSAPP_NUMBER` in `.env`."
-            if lang == "en"
-            else "N\u00famero WhatsApp a\u00fan no configurado. Configure `TWILIO_WHATSAPP_NUMBER` en `.env`."
-        )
+    st.success(
+        f"Message us on WhatsApp: **{wa_display}**"
+        if lang == "en"
+        else f"Escr\u00edbanos en WhatsApp: **{wa_display}**"
+    )
 
     st.divider()
 
@@ -318,8 +362,7 @@ with tab_wa:
     )
     examples = [
         ("What if ICE comes to my door?", "\u00bfQu\u00e9 pasa si ICE viene a mi puerta?"),
-        ("ICE", "ICE"),
-        ("POLICE", "POLICIA"),
+        ("What are my rights when stopped by police?", "\u00bfCu\u00e1les son mis derechos con la polic\u00eda?"),
         ("HELP", "HELP"),
         ("ESPA\u00d1OL", "ENGLISH"),
     ]
@@ -359,7 +402,7 @@ with tab_wa:
     )
 
     sample_en = [
-        ("You", "ICE"),
+        ("You", "What if ICE comes to my door?"),
         ("Bot",
          "\U0001f6aa If ICE is at your door:\n\n"
          "\u2022 DO NOT open the door\n"
@@ -368,19 +411,9 @@ with tab_wa:
          "\u2022 Stay silent - you have the right\n"
          "\u2022 Call a lawyer immediately if possible\n\n"
          "\u26a0\ufe0f Info only, not legal advice."),
-        ("You", "POLICE"),
-        ("Bot",
-         "\U0001f46e If stopped by police:\n\n"
-         "\u2022 Stay calm, be polite\n"
-         "\u2022 You can ask: \"Am I free to go?\"\n"
-         "\u2022 You have the right to remain silent\n"
-         "\u2022 You can refuse searches\n"
-         "\u2022 Don't lie or give fake documents\n"
-         "\u2022 Ask for a lawyer if arrested\n\n"
-         "\u26a0\ufe0f Info only, not legal advice."),
     ]
     sample_es = [
-        ("T\u00fa", "ICE"),
+        ("T\u00fa", "\u00bfQu\u00e9 pasa si ICE viene a mi puerta?"),
         ("Bot",
          "\U0001f6aa Si ICE est\u00e1 en su puerta:\n\n"
          "\u2022 NO abra la puerta\n"
@@ -388,16 +421,6 @@ with tab_wa:
          "\u2022 Diga: \"No doy consentimiento para que entre\"\n"
          "\u2022 Guarde silencio - tiene el derecho\n"
          "\u2022 Llame a un abogado si es posible\n\n"
-         "\u26a0\ufe0f Info solamente, no es asesoramiento legal."),
-        ("T\u00fa", "POLICIA"),
-        ("Bot",
-         "\U0001f46e Si la polic\u00eda lo detiene:\n\n"
-         "\u2022 Mant\u00e9ngase calmado, sea cort\u00e9s\n"
-         "\u2022 Puede preguntar: \"\u00bfSoy libre de irme?\"\n"
-         "\u2022 Tiene derecho a guardar silencio\n"
-         "\u2022 Puede negarse a registros\n"
-         "\u2022 No mienta ni use documentos falsos\n"
-         "\u2022 Pida un abogado si lo arrestan\n\n"
          "\u26a0\ufe0f Info solamente, no es asesoramiento legal."),
     ]
     sample = sample_en if lang == "en" else sample_es
@@ -412,32 +435,37 @@ with tab_wa:
 
     st.divider()
 
-    # ── Setup instructions ────────────────────────────────────
+    # ── How to get started ────────────────────────────────────
+    st.markdown(
+        "#### How to Get Started" if lang == "en"
+        else "#### C\u00f3mo Empezar"
+    )
+
+    if lang == "en":
+        st.markdown(
+            f"**Step 1:** Save our number to your contacts: "
+            f"**{wa_display or '(number coming soon)'}**\n\n"
+            "**Step 2:** Open WhatsApp and send **Hi** to that number\n\n"
+            "**Step 3:** Select your language (English or Espa\u00f1ol)\n\n"
+            "**Step 4:** Start asking questions about your immigration rights!"
+        )
+    else:
+        st.markdown(
+            f"**Paso 1:** Guarde nuestro n\u00famero en sus contactos: "
+            f"**{wa_display or '(n\u00famero pr\u00f3ximamente)'}**\n\n"
+            "**Paso 2:** Abra WhatsApp y env\u00ede **Hola** a ese n\u00famero\n\n"
+            "**Paso 3:** Seleccione su idioma (English o Espa\u00f1ol)\n\n"
+            "**Paso 4:** Comience a hacer preguntas sobre sus derechos de inmigraci\u00f3n!"
+        )
+
     with st.expander(
-        "Developer Setup" if lang == "en"
-        else "Configuraci\u00f3n para Desarrolladores"
+        "Developer Info" if lang == "en"
+        else "Info para Desarrolladores"
     ):
         st.markdown(
-            "**To run the WhatsApp bot locally:**\n\n"
-            "```bash\n"
-            "# 1. Install dependencies\n"
-            "pip install twilio flask\n\n"
-            "# 2. Set environment variables in .env\n"
-            "TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxx\n"
-            "TWILIO_AUTH_TOKEN=your_auth_token\n"
-            "TWILIO_WHATSAPP_NUMBER=whatsapp:+14155238886\n\n"
-            "# 3. Start the Flask server\n"
-            "python src/whatsapp_bot.py\n\n"
-            "# 4. Expose with ngrok (for Twilio webhook)\n"
-            "ngrok http 5001\n\n"
-            "# 5. In Twilio Console, set WhatsApp sandbox webhook to:\n"
-            "# https://your-ngrok-url.ngrok.io/whatsapp\n"
-            "```\n\n"
-            "**Test without Twilio:**\n\n"
-            "```bash\n"
-            "curl -X POST http://localhost:5001/test \\\n"
-            '  -H "Content-Type: application/json" \\\n'
-            '  -d \'{"phone": "whatsapp:+1TEST", '
-            '"message": "What if ICE comes to my door?"}\'\n'
-            "```"
+            "See `README.md` for developer setup instructions "
+            "(Twilio, ngrok, Flask webhook configuration)."
+            if lang == "en"
+            else "Vea `README.md` para instrucciones de configuraci\u00f3n "
+            "para desarrolladores (Twilio, ngrok, webhook de Flask)."
         )
